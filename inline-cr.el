@@ -1,10 +1,10 @@
 ;;; inline-cr.el --- Lightweight inline code review tools -*- lexical-binding: t; -*-
 
-;; Author: Your Name
+;; Author: elam + (mostly) chatgpt
 ;; Version: 0.4
 ;; Package-Requires: ((emacs "26.1"))
 ;; Keywords: code-review, navigation, review
-;; URL: https://github.com/yourname/inline-cr
+;; URL: https://github.com/elamdf/inline-cr
 
 ;;; Commentary:
 
@@ -241,8 +241,30 @@ Otherwise, insert plain newline."
       (read-only-mode 1))
     (pop-to-buffer report-buf)))
 
+(defun inline-cr--thread-boundaries ()
+  "Return (START . END) of current CR/XCR thread, or nil."
+  (save-excursion
+    (let (start end)
+      ;; Move to top of thread
+      (while (and (not (bobp))
+                  (save-excursion
+                    (forward-line -1)
+                    (looking-at "^> ")))
+        (forward-line -1))
+      (when (looking-at "^> \\(C\\|XC\\)R ")
+        (setq start (point))
+        ;; Move to end of thread
+        (while (and (not (eobp))
+                    (progn
+                      (forward-line 1)
+                      (looking-at "^> "))))
+        (setq end (point))
+        (cons start end)))))
+
+
 (provide 'inline-cr)
 
 ;;; inline-cr.el ends here
+
 
 
