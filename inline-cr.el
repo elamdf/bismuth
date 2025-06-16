@@ -172,6 +172,7 @@ Otherwise, insert plain newline."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-n") #'inline-cr-next-actionable)
     (define-key map (kbd "C-c C-p") #'inline-cr-prev-actionable)
+    (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
     (define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
     (define-key map (kbd "RET") #'inline-cr-jump-to-thread-end)
     map)
