@@ -89,6 +89,22 @@
             (inline-cr--refresh-highlighting)))
 
 
+(defun inline-cr--virtual-org-buffer ()
+  "Return a buffer with actionable CRs as TODO entries."
+  (let ((buf (get-buffer-create "*inline-cr-org-agenda*")))
+    (with-current-buffer buf
+      (erase-buffer)
+      (org-mode)
+      (let ((mentions (inline-cr--collect-cr-mentions)))
+        (dolist (entry mentions)
+          (let* ((file (car entry))
+                 (line (cadr entry))
+                 (text (string-trim (caddr entry)))
+                 (link (format "[[file:%s::%d]]" file line)))
+            (insert (format "* TODO %s\n  %s\n\n" text link)))))
+      buf)))
+
+
 
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
@@ -308,8 +324,8 @@ Otherwise, insert plain newline."
 
 
 
-
 (defvar inline-cr--mention-buffer "*Inline CR Mentions*")
+
 
 (defun inline-cr--collect-cr-mentions ()
   "Return a list of (FILE LINE-NUM TEXT) for actionable CR/XCR threads in .org and .md files."
@@ -342,6 +358,24 @@ Otherwise, insert plain newline."
                 (forward-line 1)
                 (cl-incf line-num)))))))
     (nreverse results)))
+
+(defun inline-cr--agenda-source ()
+  "Generate Org agenda items for actionable inline CR/XCRs."
+  (let ((items '()))
+    (dolist (entry (inline-cr--collect-cr-mentions))
+      (let* ((file (car entry))
+             (line (cadr entry))
+             (text (cl-caddr entry))
+             (marker (with-current-buffer (find-file-noselect file)
+                       (save-excursion
+                         (goto-char (point-min))
+                         (forward-line (1- line))
+                         (point-marker))))
+             (heading (format "[inline-cr] %s:%d %s"
+                              (file-name-nondirectory file) line text)))
+        (push (list heading marker nil) items)))
+    (nreverse items)))
+
 
 
 (defun inline-cr--mention-mode ()
