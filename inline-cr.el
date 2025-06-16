@@ -25,11 +25,13 @@
 
 ;;; Code:
 
+(require 'tabulated-list)
+
 (defgroup inline-cr nil
   "Inline code review utilities."
   :group 'tools)
 
-(defcustom inline-cr-user (getenv "USER")
+(defcustom inline-cr-user(getenv "USER")
   "Username used to determine which comments require your response."
   :type 'string
   :group 'inline-cr)
@@ -49,30 +51,72 @@
   "Face for reply lines."
   :group 'inline-cr)
 
+(defface inline-cr-actionable-face
+  '((t :weight bold :foreground "orange"))
+  "Face for actionable CR/XCR lines.")
 
-(defun inline-cr--font-lock-keywords ()
-  "Font-lock rules for CR/XCR/reply faces only."
-  (list
-   '("^> CR \\([^ ]+\\) for \\([^:]+\\):.*$" . 'inline-cr-author-face)
-   '("^> XCR \\([^ ]+\\) for \\([^:]+\\):.*$" . 'inline-cr-reviewer-face)
-   '("^> [^:]+:.*$" . 'inline-cr-reply-face)))
+(defface inline-cr-nonactionable-face
+  '((t :foreground "gray50"))
+  "Face for non-actionable CR/XCR lines.")
+
+(defun inline-cr--font-lock-matcher (limit)
+  "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
+  (while (re-search-forward "^> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" limit t)
+    (let ((start (match-beginning 0))
+          (end (match-end 0)))
+      (when (get-text-property start 'inline-cr-actionable)
+        (put-text-property start end 'font-lock-face 'inline-cr-actionable-face))
+      (unless (get-text-property start 'inline-cr-actionable)
+        (put-text-property start end 'font-lock-face 'inline-cr-nonactionable-face)))
+    ;; Always return non-nil so font-lock keeps going
+    t))
+
+(font-lock-add-keywords nil
+                        '((inline-cr--font-lock-matcher))
+                        'append)
+
+(defun inline-cr--refresh-highlighting ()
+  "Rescan and re-highlight CR/XCR threads."
+  (inline-cr--scan-for-actionables (point-min) (point-max))
+  (font-lock-flush)
+  (font-lock-ensure))
+
+(add-hook 'inline-cr-mode-hook
+          (lambda ()
+            (font-lock-add-keywords nil
+                                    '((inline-cr--font-lock-matcher))
+                                    'append)
+            (inline-cr--refresh-highlighting)))
+
+
 
 (defun inline-cr--scan-for-actionables (start end)
-  "Apply `inline-cr-actionable` text properties between START and END."
+  "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
+
+  
   (save-excursion
     (goto-char start)
+
     (let ((case-fold-search nil))
-      (while (re-search-forward "^> \\(C\\|XC\\)R \\([^ ]+\\) for \\([^:]+\\):" end t)
-        (let ((who (match-string 2))
-              (whom (match-string 3))
-              (beg (match-beginning 0))
-              (end (match-end 0)))
+
+      (while (re-search-forward "^> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" nil t)
+        
+
+        (let* ((kind (match-string 1)) ;; "CR" or "XCR"
+               (who (match-string 2))
+               (whom (match-string 3))
+               (beg (match-beginning 0))
+               (end (match-end 0)))
           (when (or
-                 (and (string= (match-string 1) "CR")
+                 (and (string= kind "CR")
                       (string= whom inline-cr-user))
-                 (and (string= (match-string 1) "XCR")
+                 (and (string= kind "XCR")
                       (string= who inline-cr-user)))
             (put-text-property beg end 'inline-cr-actionable t)))))))
+
+
+
+
 
 
 
@@ -261,6 +305,94 @@ Otherwise, insert plain newline."
                       (looking-at "^> "))))
         (setq end (point))
         (cons start end)))))
+
+
+
+
+(defvar inline-cr--mention-buffer "*Inline CR Mentions*")
+
+(defun inline-cr--collect-cr-mentions ()
+  "Return a list of (FILE LINE-NUM TEXT) for actionable CR/XCR threads in .org and .md files."
+  (unless (projectile-project-p)
+    (error "Not in a projectile project"))
+  (let* ((root (projectile-project-root))
+         (files (cl-remove-if-not
+                 (lambda (f)
+                   (string-match-p "\\.\\(org\\|md\\)\\'" f))
+                 (projectile-current-project-files)))
+         (results '()))
+    (dolist (file files)
+      (let ((full-path (expand-file-name file root)))
+        (when (file-readable-p full-path)
+          (with-temp-buffer
+(message "inline-cr: checking %s as user %s" full-path inline-cr-user)
+            
+            (insert-file-contents full-path)
+            (delay-mode-hooks (normal-mode t))
+            ;; Annotate actionables
+            (inline-cr--scan-for-actionables (point-min) (point-max))
+            ;; Scan for actionable lines
+            (goto-char (point-min))
+            (let ((line-num 1))
+              (while (not (eobp))
+                (when (get-text-property (point) 'inline-cr-actionable)
+                  (let ((line (buffer-substring-no-properties
+                               (line-beginning-position) (line-end-position))))
+                    (push (list full-path line-num line) results)))
+                (forward-line 1)
+                (cl-incf line-num)))))))
+    (nreverse results)))
+
+
+(defun inline-cr--mention-mode ()
+  "Major mode for displaying inline CR mentions."
+  (kill-all-local-variables)
+  (setq major-mode 'inline-cr--mention-mode)
+  (setq mode-name "Inline CR Mentions")
+  (use-local-map tabulated-list-mode-map)
+  (setq tabulated-list-format [("File" 40 t)
+                               ("Line" 6 t)
+                               ("Text" 0 nil)])
+  (setq tabulated-list-padding 2)
+  (setq tabulated-list-entries
+        (mapcar (lambda (entry)
+                  (let ((file (car entry))
+                        (line (cadr entry))
+                        (text (cl-caddr entry)))
+                    ;; Store file and line in the entry ID for lookup
+                    (list (cons file line)
+                          (vector
+                           (file-relative-name file (projectile-project-root))
+                           (number-to-string line)
+                           text))))
+                (inline-cr--collect-cr-mentions)))
+  (setq tabulated-list-sort-key (cons "File" nil))
+  (add-hook 'tabulated-list-revert-hook #'inline-cr-list-all-mentions nil t)
+
+  ;; Add RET handler
+  (define-key tabulated-list-mode-map (kbd "RET") #'inline-cr--visit-entry)
+
+  (tabulated-list-init-header)
+  (tabulated-list-print))
+
+(defun inline-cr--visit-entry ()
+  "Visit the file and line at point in the CR/XCR list."
+  (interactive)
+  (let* ((id (tabulated-list-get-id)) ;; ID is a (file . line) pair
+         (file (car id))
+         (line (cdr id)))
+    (find-file file)
+    (goto-char (point-min))
+    (forward-line (1- line))))
+
+
+(defun inline-cr-list-all-mentions ()
+  "Display a list of all CR/XCR mentions in a project in a clickable buffer."
+  (interactive)
+  (let ((buf (get-buffer-create inline-cr--mention-buffer)))
+    (with-current-buffer buf
+      (inline-cr--mention-mode))
+    (pop-to-buffer buf)))
 
 
 (provide 'inline-cr)
