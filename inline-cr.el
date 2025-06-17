@@ -232,19 +232,7 @@ Otherwise, insert plain newline."
 
 
 
-;;;###autoload
-(define-minor-mode inline-cr-mode
-  "Minor mode to highlight and navigate inline code review threads."
-  :lighter " CR"
-  :keymap inline-cr-mode-map
-  (if inline-cr-mode
-      (progn
-        (jit-lock-register #'inline-cr--scan-for-actionables)
-        (font-lock-flush)
-        (font-lock-ensure))
-    (jit-lock-unregister #'inline-cr--scan-for-actionables)
-    (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))
-    (font-lock-flush)))
+
 
 
 
@@ -478,6 +466,20 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     (define-key map (kbd "RET") #'inline-cr-jump-to-thread-end)
     map)
   "Keymap for inline-cr-mode.")
+
+;;;###autoload
+(define-minor-mode inline-cr-mode
+  "Minor mode to highlight and navigate inline code review threads."
+  :lighter " CR"
+  :keymap inline-cr-mode-map
+  (if inline-cr-mode
+      (progn
+        (jit-lock-register #'inline-cr--scan-for-actionables)
+        (font-lock-flush)
+        (font-lock-ensure))
+    (jit-lock-unregister #'inline-cr--scan-for-actionables)
+    (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))
+    (font-lock-flush)))
 
 ;; HOOKS 
 (add-hook 'inline-cr-mode-hook #'inline-cr--refresh-display)
