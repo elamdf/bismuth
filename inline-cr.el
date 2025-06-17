@@ -18,10 +18,10 @@
 ;;   C-c C-n  → next actionable comment (wraps)
 ;;   C-c C-p  → previous actionable comment (wraps)
 ;;   C-c RET  → toggle CR/XCR at point
+;;   C-c t  → list all CR/XCR lines involving youa
 ;;   RET      → jump to end of comment thread and insert "> you: "
 ;;
-;; Command:
-;;   M-x inline-cr-find-cr-mentions → list all CR/XCR lines involving you
+
 
 ;;; Code:
 
@@ -78,9 +78,7 @@
     t))
 
 
-(font-lock-add-keywords nil
-                        '((inline-cr--font-lock-matcher))
-                        'append)
+
 
 (defun inline-cr--refresh-highlighting ()
   "Rescan and re-highlight CR/XCR threads."
@@ -99,7 +97,7 @@
       (org-mode)
       (let ((mentions (inline-cr--collect-cr-mentions)))
         (dolist (entry mentions)
-          (let* ((file (car entry))
+          (let* ((file (file-name-nondirectory (car entry)))
                  (line (cadr entry))
                  (text (string-trim (caddr entry)))
                  (link (format "[[file:%s::%d]]" file line)))
@@ -198,7 +196,7 @@ Otherwise, insert plain newline."
       (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
       ;; TODO this sucks bc it makes a dumb ass html comment in md
       (if (eq (point) (point-max)) (insert "\n"))
-      (insert (format "%s > %s: " comment-start user))
+      (insert (format "%s> %s: " (or comment-start "") user))
       (recenter)))
 
    ;; Case 2: Inside thread → insert new line with "> "
@@ -206,7 +204,7 @@ Otherwise, insert plain newline."
       (beginning-of-line)
       (looking-at "^.*> "))
     (end-of-line)
-    (insert (format "\n%s > " comment-start)))
+    (insert (format "\n%s> " (or comment-start ""))))
 
    ;; Case 3: Else → insert regular newline
    (t
@@ -226,21 +224,13 @@ Otherwise, insert plain newline."
       (forward-line -1))
     (beginning-of-line)
     (cond
-     ((looking-at "^.*> CR ") (replace-match ( format "%s > XCR " comment-start)))
-     ((looking-at "^.*> XCR ") (replace-match ( format "%s > CR " comment-start)))     
+     ((looking-at "^.*> CR ") (replace-match ( format "%s> XCR " (or comment-start ""))))
+     ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-start ""))))     
      (t (user-error "Not inside a CR/XCR comment thread")))))
 
 
 
-(defvar inline-cr-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-n") #'inline-cr-next-actionable)
-    (define-key map (kbd "C-c C-p") #'inline-cr-prev-actionable)
-    (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
-    (define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
-    (define-key map (kbd "RET") #'inline-cr-jump-to-thread-end)
-    map)
-  "Keymap for inline-cr-mode.")
+
 
 ;;;###autoload
 (define-minor-mode inline-cr-mode
@@ -267,6 +257,7 @@ Otherwise, insert plain newline."
 
 
 ;;;###autoload
+;; TODO replace with (defun inline-cr-list-all-file-mentions () that uses inline--cr-mention-mode
 (defun inline-cr-find-cr-mentions ()
   "Open a buffer with clickable links to CR/XCR comments involving you."
   (interactive)
@@ -274,11 +265,11 @@ Otherwise, insert plain newline."
          (patterns (list (concat "^.*> CR .* for " user ":")
                          (concat "^.*> XCR " user " for .*:")))
          (source-buf (current-buffer))
-         (report-buf (get-buffer-create "*CR Mentions*")))
+         (report-buf (get-buffer-create  (format "*%s CR Actionables*" (buffer-name source-buf)))))
     (with-current-buffer report-buf
       (let ((inhibit-read-only t))
         (erase-buffer)
-        (insert (format "Mentions of %s in: %s\n\n" inline-cr-user (buffer-name source-buf)))
+        ;; (insert (format "Actionables for %s in: %s\n\n" inline-cr-user (buffer-name source-buf)))
         (with-current-buffer source-buf
           (save-excursion
             (goto-char (point-min))
@@ -389,7 +380,7 @@ Otherwise, insert plain newline."
   (setq tabulated-list-padding 2)
   (setq tabulated-list-entries
         (mapcar (lambda (entry)
-                  (let ((file (car entry))
+                  (let ((file (file-name-nondirectory (car entry)))
                         (line (cadr entry))
                         (text (cl-caddr entry)))
                     ;; Store file and line in the entry ID for lookup
@@ -400,7 +391,7 @@ Otherwise, insert plain newline."
                            text))))
                 (inline-cr--collect-cr-mentions)))
   (setq tabulated-list-sort-key (cons "File" nil))
-  (add-hook 'tabulated-list-revert-hook #'inline-cr-list-all-mentions nil t)
+  (add-hook 'tabulated-list-revert-hook #'inline-cr-list-all-project-mentions nil t)
 
   ;; Add RET handler
   (define-key tabulated-list-mode-map (kbd "RET") #'inline-cr--visit-entry)
@@ -419,13 +410,15 @@ Otherwise, insert plain newline."
     (forward-line (1- line))))
 
 
-(defun inline-cr-list-all-mentions ()
+(defun inline-cr-list-all-project-mentions ()
   "Display a list of all CR/XCR mentions in a project in a clickable buffer."
   (interactive)
-  (let ((buf (get-buffer-create inline-cr--mention-buffer)))
+  (let ((buf (get-buffer-create (format "* %s CR Actionables*" (projectile-project-name)))))
     (with-current-buffer buf
       (inline-cr--mention-mode))
     (pop-to-buffer buf)))
+
+
 
 
 
@@ -474,7 +467,17 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   (inline-cr--highlight-thread (point-min) (point-max)))
 
 
-
+;; kbd map
+(defvar inline-cr-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c C-n") #'inline-cr-next-actionable)
+    (define-key map (kbd "C-c C-p") #'inline-cr-prev-actionable)
+    (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
+    (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)    
+    (define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
+    (define-key map (kbd "RET") #'inline-cr-jump-to-thread-end)
+    map)
+  "Keymap for inline-cr-mode.")
 
 ;; HOOKS 
 (add-hook 'inline-cr-mode-hook #'inline-cr--refresh-display)
@@ -495,6 +498,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
                                     '((inline-cr--font-lock-matcher))
                                     'append)
             (inline-cr--refresh-highlighting)))
+;; (font-lock-add-keywords nil
+;;                         '((inline-cr--font-lock-matcher))
+;;                         'append)
 
 (provide 'inline-cr)
 
