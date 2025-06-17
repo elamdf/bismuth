@@ -245,11 +245,9 @@ Otherwise, insert plain newline."
   :keymap inline-cr-mode-map
   (if inline-cr-mode
       (progn
-        (font-lock-add-keywords nil (inline-cr--font-lock-keywords))
         (jit-lock-register #'inline-cr--scan-for-actionables)
         (font-lock-flush)
         (font-lock-ensure))
-    (font-lock-remove-keywords nil (inline-cr--font-lock-keywords))
     (jit-lock-unregister #'inline-cr--scan-for-actionables)
     (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))
     (font-lock-flush)))
@@ -428,10 +426,60 @@ Otherwise, insert plain newline."
       (inline-cr--mention-mode))
     (pop-to-buffer buf)))
 
+(defface inline-cr-block-face
+  '((t (:background "#2e3440" :extend t)))
+  "Background face for inline code review blocks.")
+
+(defface inline-cr-actionable-block-face
+  '((t (:background "#3b4252" :extend t)))
+  "Background face for actionable inline code review blocks.")
+
+;; TODO (elamdf) this should do markdown formatting even in non-markdown files
+
+(defun inline-cr--highlight-thread (start end)
+  "Apply background face to CR/XCR thread from START to END.
+If the head has `inline-cr-actionable` property, use the actionable face."
+  (save-excursion
+    (goto-char start)
+    (while (re-search-forward "^> \\(CR\\|XCR\\) .*$" end t)
+      (let* ((head-start (line-beginning-position))
+             (head-end (line-end-position))
+             ;; Check for actionable property on any character in the head
+             (actionable (get-text-property head-start 'inline-cr-actionable))
+             (face (if actionable
+                       'inline-cr-actionable-block-face
+                     'inline-cr-block-face)))
+        ;; Highlight head line
+        (let ((ov (make-overlay head-start head-end)))
+          (overlay-put ov 'face face)
+          (overlay-put ov 'inline-cr t))
+        ;; Highlight thread body
+        (forward-line 1)
+        (while (and (not (eobp)) (looking-at "^> "))
+          (let ((ov (make-overlay (line-beginning-position) (line-end-position))))
+            (overlay-put ov 'face face)
+            (overlay-put ov 'inline-cr t))
+          (forward-line 1))))))
+
+
+
+
+(defun inline-cr--refresh-display ()
+  "Refresh visual display of inline CRs."
+  (remove-overlays (point-min) (point-max) 'inline-cr t)
+  (inline-cr--highlight-thread (point-min) (point-max)))
+
+
+
+(add-hook 'inline-cr-mode-hook #'inline-cr--refresh-display)
+(add-hook 'after-change-functions
+          (lambda (&rest _) (inline-cr--refresh-display)))
+
 
 (provide 'inline-cr)
 
 ;;; inline-cr.el ends here
+
 
 
 
