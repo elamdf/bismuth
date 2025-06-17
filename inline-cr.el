@@ -61,15 +61,22 @@
 
 (defun inline-cr--font-lock-matcher (limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
-  (while (re-search-forward "^> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" limit t)
+  (while (re-search-forward "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" limit t)
     (let ((start (match-beginning 0))
           (end (match-end 0)))
       (when (get-text-property start 'inline-cr-actionable)
-        (put-text-property start end 'font-lock-face 'inline-cr-actionable-face))
+        
+
+(let ((ov (make-overlay start end)))
+  (overlay-put ov 'face 'inline-cr-actionable-face)
+  (overlay-put ov 'inline-cr t)))
       (unless (get-text-property start 'inline-cr-actionable)
-        (put-text-property start end 'font-lock-face 'inline-cr-nonactionable-face)))
+(let ((ov (make-overlay start end)))
+  (overlay-put ov 'face 'inline-cr-nonactionable-face)
+  (overlay-put ov 'inline-cr t))))
     ;; Always return non-nil so font-lock keeps going
     t))
+
 
 (font-lock-add-keywords nil
                         '((inline-cr--font-lock-matcher))
@@ -81,12 +88,7 @@
   (font-lock-flush)
   (font-lock-ensure))
 
-(add-hook 'inline-cr-mode-hook
-          (lambda ()
-            (font-lock-add-keywords nil
-                                    '((inline-cr--font-lock-matcher))
-                                    'append)
-            (inline-cr--refresh-highlighting)))
+
 
 
 (defun inline-cr--virtual-org-buffer ()
@@ -115,7 +117,7 @@
 
     (let ((case-fold-search nil))
 
-      (while (re-search-forward "^> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" nil t)
+      (while (re-search-forward "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" nil t)
         
 
         (let* ((kind (match-string 1)) ;; "CR" or "XCR"
@@ -123,16 +125,16 @@
                (whom (match-string 3))
                (beg (match-beginning 0))
                (end (match-end 0)))
-          (when (or
+          (message (match-string 0))
+          (if (or
                  (and (string= kind "CR")
                       (string= whom inline-cr-user))
                  (and (string= kind "XCR")
                       (string= who inline-cr-user)))
-            (put-text-property beg end 'inline-cr-actionable t)))))))
+            (put-text-property beg end 'inline-cr-actionable t)
+                (put-text-property beg end 'inline-cr-actionable nil)
 
-
-
-
+            ))))))
 
 
 
@@ -143,8 +145,8 @@
          (restart (if (eq direction 'next) (point-min) (point-max)))
          (limit (if (eq direction 'next) (point-max) (point-min)))
          (user (regexp-quote inline-cr-user))
-         (patterns (list (concat "^> CR .* for " user ":")
-                         (concat "^> XCR " user " for .*:")))
+         (patterns (list (concat "^.*> CR .* for " user ":")
+                         (concat "^.*> XCR " user " for .*:")))
          (found nil))
     ;; Search forward or backward
     (save-excursion
@@ -181,7 +183,7 @@
   "Return t if point is on a CR or XCR header line."
   (save-excursion
     (beginning-of-line)
-    (looking-at "^> \\(C\\|XC\\)R ")))
+    (looking-at "^.*> \\(C\\|XC\\)R ")))
 
 (defun inline-cr-jump-to-thread-end ()
   "Smart RET: If on CR/XCR header, jump to end and insert reply.
@@ -193,16 +195,17 @@ Otherwise, insert plain newline."
    ((inline-cr--at-thread-header-p)
     (let ((user inline-cr-user))
       (forward-line 1)
-      (while (and (not (eobp)) (looking-at "^> ")) (forward-line 1))
-      (insert (format "> %s: " user))
+      (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
+      ;; TODO this sucks bc it makes a dumb ass html comment in md
+      (insert (format "\n%s > %s: " comment-start user))
       (recenter)))
 
    ;; Case 2: Inside thread → insert new line with "> "
    ((save-excursion
       (beginning-of-line)
-      (looking-at "^> "))
+      (looking-at "^.*> "))
     (end-of-line)
-    (insert "\n> "))
+    (insert (format "\n%s > " comment-start)))
 
    ;; Case 3: Else → insert regular newline
    (t
@@ -218,12 +221,12 @@ Otherwise, insert plain newline."
     (while (and (not (bobp))
                 (save-excursion
                   (forward-line -1)
-                  (looking-at "^> ")))
+                  (looking-at "^.*> ")))
       (forward-line -1))
     (beginning-of-line)
     (cond
-     ((looking-at "^> CR ") (replace-match "> XCR "))
-     ((looking-at "^> XCR ") (replace-match "> CR "))
+     ((looking-at "^.*> CR ") (replace-match ( format "%s > XCR " comment-start)))
+     ((looking-at "^.*> XCR ") (replace-match ( format "%s > CR " comment-start)))     
      (t (user-error "Not inside a CR/XCR comment thread")))))
 
 
@@ -260,18 +263,15 @@ Otherwise, insert plain newline."
   (when (derived-mode-p 'markdown-mode 'org-mode)
     (inline-cr-mode)))
 
-;;;###autoload
-(add-hook 'markdown-mode-hook #'inline-cr-enable-in-reviewable-modes)
-;;;###autoload
-(add-hook 'org-mode-hook #'inline-cr-enable-in-reviewable-modes)
+
 
 ;;;###autoload
 (defun inline-cr-find-cr-mentions ()
   "Open a buffer with clickable links to CR/XCR comments involving you."
   (interactive)
   (let* ((user (regexp-quote inline-cr-user))
-         (patterns (list (concat "^> CR .* for " user ":")
-                         (concat "^> XCR " user " for .*:")))
+         (patterns (list (concat "^.*> CR .* for " user ":")
+                         (concat "^.*> XCR " user " for .*:")))
          (source-buf (current-buffer))
          (report-buf (get-buffer-create "*CR Mentions*")))
     (with-current-buffer report-buf
@@ -308,15 +308,15 @@ Otherwise, insert plain newline."
       (while (and (not (bobp))
                   (save-excursion
                     (forward-line -1)
-                    (looking-at "^> ")))
+                    (looking-at "^.*> ")))
         (forward-line -1))
-      (when (looking-at "^> \\(C\\|XC\\)R ")
+      (when (looking-at "^.*> \\(C\\|XC\\)R ")
         (setq start (point))
         ;; Move to end of thread
         (while (and (not (eobp))
                     (progn
                       (forward-line 1)
-                      (looking-at "^> "))))
+                      (looking-at "^.*> "))))
         (setq end (point))
         (cons start end)))))
 
@@ -426,13 +426,16 @@ Otherwise, insert plain newline."
       (inline-cr--mention-mode))
     (pop-to-buffer buf)))
 
+
+
 (defface inline-cr-block-face
-  '((t (:background "#2e3440" :extend t)))
-  "Background face for inline code review blocks.")
+  '((t (:inherit markdown-pre-face :extend t)))
+  "Face for non-actionable inline code review blocks.")
 
 (defface inline-cr-actionable-block-face
-  '((t (:background "#3b4252" :extend t)))
-  "Background face for actionable inline code review blocks.")
+  '((t (:inherit markdown-pre-face :background "#3b4252" :extend t)))
+  "Face for actionable inline code review blocks.")
+
 
 ;; TODO (elamdf) this should do markdown formatting even in non-markdown files
 
@@ -441,7 +444,7 @@ Otherwise, insert plain newline."
 If the head has `inline-cr-actionable` property, use the actionable face."
   (save-excursion
     (goto-char start)
-    (while (re-search-forward "^> \\(CR\\|XCR\\) .*$" end t)
+    (while (re-search-forward "^.*> \\(CR\\|XCR\\) .*$" end t)
       (let* ((head-start (line-beginning-position))
              (head-end (line-end-position))
              ;; Check for actionable property on any character in the head
@@ -455,7 +458,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
           (overlay-put ov 'inline-cr t))
         ;; Highlight thread body
         (forward-line 1)
-        (while (and (not (eobp)) (looking-at "^> "))
+        (while (and (not (eobp)) (looking-at "^.*> "))
           (let ((ov (make-overlay (line-beginning-position) (line-end-position))))
             (overlay-put ov 'face face)
             (overlay-put ov 'inline-cr t))
@@ -471,10 +474,26 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 
 
 
+
+;; HOOKS 
 (add-hook 'inline-cr-mode-hook #'inline-cr--refresh-display)
 (add-hook 'after-change-functions
           (lambda (&rest _) (inline-cr--refresh-display)))
 
+;; enable inline comments by default for some filetypes
+;;;###autoload
+(add-hook 'markdown-mode-hook #'inline-cr-enable-in-reviewable-modes)
+;;;###autoload
+(add-hook 'org-mode-hook #'inline-cr-enable-in-reviewable-modes)
+;;;###autoload
+(add-hook 'c-mode-hook #'inline-cr-enable-in-reviewable-modes)
+
+(add-hook 'inline-cr-mode-hook
+          (lambda ()
+            (font-lock-add-keywords nil
+                                    '((inline-cr--font-lock-matcher))
+                                    'append)
+            (inline-cr--refresh-highlighting)))
 
 (provide 'inline-cr)
 
