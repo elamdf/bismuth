@@ -197,7 +197,8 @@ Otherwise, insert plain newline."
       (forward-line 1)
       (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
       ;; TODO this sucks bc it makes a dumb ass html comment in md
-      (insert (format "\n%s > %s: " comment-start user))
+      (if (eq (point) (point-max)) (insert "\n"))
+      (insert (format "%s > %s: " comment-start user))
       (recenter)))
 
    ;; Case 2: Inside thread → insert new line with "> "
