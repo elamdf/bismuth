@@ -59,33 +59,22 @@
   '((t :foreground "gray50"))
   "Face for non-actionable CR/XCR lines.")
 
-(defun inline-cr--font-lock-matcher (limit)
+(defun inline-cr--apply-actionable-overlay (start limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
-  (while (re-search-forward "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" limit t)
-    (let ((start (match-beginning 0))
-          (end (match-end 0)))
-      (when (get-text-property start 'inline-cr-actionable)
-        
-
-(let ((ov (make-overlay start end)))
-  (overlay-put ov 'face 'inline-cr-actionable-face)
-  (overlay-put ov 'inline-cr t)))
-      (unless (get-text-property start 'inline-cr-actionable)
-(let ((ov (make-overlay start end)))
-  (overlay-put ov 'face 'inline-cr-nonactionable-face)
-  (overlay-put ov 'inline-cr t))))
-    ;; Always return non-nil so font-lock keeps going
-    t))
-
-
-
-
-(defun inline-cr--refresh-highlighting ()
-  "Rescan and re-highlight CR/XCR threads."
-  (inline-cr--scan-for-actionables (point-min) (point-max))
-  (font-lock-flush)
-  (font-lock-ensure))
-
+  (save-excursion
+    (goto-char start)  
+    (while (re-search-forward "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" limit t)
+      (let ((start (match-beginning 0))
+            (end (match-end 0)))
+        (when (get-text-property start 'inline-cr-actionable)
+          (let ((ov (make-overlay start end)))
+            (overlay-put ov 'face 'inline-cr-actionable-face)
+            (overlay-put ov 'inline-cr t)))
+        (unless (get-text-property start 'inline-cr-actionable)
+          (let ((ov (make-overlay start end)))
+            (overlay-put ov 'face 'inline-cr-nonactionable-face)
+            (overlay-put ov 'inline-cr t))))
+      t)))
 
 
 
@@ -125,12 +114,12 @@
                (end (match-end 0)))
           (message (match-string 0))
           (if (or
-                 (and (string= kind "CR")
-                      (string= whom inline-cr-user))
-                 (and (string= kind "XCR")
-                      (string= who inline-cr-user)))
-            (put-text-property beg end 'inline-cr-actionable t)
-                (put-text-property beg end 'inline-cr-actionable nil)
+               (and (string= kind "CR")
+                    (string= whom inline-cr-user))
+               (and (string= kind "XCR")
+                    (string= who inline-cr-user)))
+              (put-text-property beg end 'inline-cr-actionable t)
+            (put-text-property beg end 'inline-cr-actionable nil)
 
             ))))))
 
@@ -319,7 +308,7 @@ Otherwise, insert plain newline."
       (let ((full-path (expand-file-name file root)))
         (when (file-readable-p full-path)
           (with-temp-buffer
-(message "inline-cr: checking %s as user %s" full-path inline-cr-user)
+            (message "inline-cr: checking %s as user %s" full-path inline-cr-user)
             
             (insert-file-contents full-path)
             (delay-mode-hooks (normal-mode t))
@@ -452,7 +441,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (defun inline-cr--refresh-display ()
   "Refresh visual display of inline CRs."
   (remove-overlays (point-min) (point-max) 'inline-cr t)
+  (inline-cr--apply-actionable-overlay (point-min) (point-max))
   (inline-cr--highlight-thread (point-min) (point-max)))
+
 
 
 ;; kbd map
@@ -474,12 +465,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   :keymap inline-cr-mode-map
   (if inline-cr-mode
       (progn
-        (jit-lock-register #'inline-cr--scan-for-actionables)
-        (font-lock-flush)
-        (font-lock-ensure))
+        (jit-lock-register #'inline-cr--scan-for-actionables))
     (jit-lock-unregister #'inline-cr--scan-for-actionables)
-    (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))
-    (font-lock-flush)))
+    (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))))
 
 ;; HOOKS 
 (add-hook 'inline-cr-mode-hook #'inline-cr--refresh-display)
@@ -494,15 +482,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 ;;;###autoload
 (add-hook 'c-mode-hook #'inline-cr-enable-in-reviewable-modes)
 
-(add-hook 'inline-cr-mode-hook
-          (lambda ()
-            (font-lock-add-keywords nil
-                                    '((inline-cr--font-lock-matcher))
-                                    'append)
-            (inline-cr--refresh-highlighting)))
-;; (font-lock-add-keywords nil
-;;                         '((inline-cr--font-lock-matcher))
-;;                         'append)
+
 
 (provide 'inline-cr)
 
