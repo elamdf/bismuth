@@ -31,6 +31,11 @@
   "Inline code review utilities."
   :group 'tools)
 
+(defcustom inline-cr-header-regex  "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):"
+  "Regex to match the reviewer and author of an [X]CR header."
+  :type 'string
+  :group 'inline-cr)
+
 (defcustom inline-cr-user(getenv "USER")
   "Username used to determine which comments require your response."
   :type 'string
@@ -63,7 +68,7 @@
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
   (save-excursion
     (goto-char start)  
-    (while (re-search-forward "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" limit t)
+    (while (re-search-forward inline-cr-header-regex nil t)
       (let ((start (match-beginning 0))
             (end (match-end 0)))
         (when (get-text-property start 'inline-cr-actionable)
@@ -104,9 +109,7 @@
 
     (let ((case-fold-search nil))
 
-      (while (re-search-forward "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):" nil t)
-        
-
+      (while (re-search-forward inline-cr-header-regex nil t)
         (let* ((kind (match-string 1)) ;; "CR" or "XCR"
                (who (match-string 2))
                (whom (match-string 3))
@@ -119,9 +122,7 @@
                (and (string= kind "XCR")
                     (string= who inline-cr-user)))
               (put-text-property beg end 'inline-cr-actionable t)
-            (put-text-property beg end 'inline-cr-actionable nil)
-
-            ))))))
+            (put-text-property beg end 'inline-cr-actionable nil)))))))
 
 
 
@@ -415,7 +416,7 @@ Otherwise, insert plain newline."
 If the head has `inline-cr-actionable` property, use the actionable face."
   (save-excursion
     (goto-char start)
-    (while (re-search-forward "^.*> \\(CR\\|XCR\\) .*$" end t)
+    (while (re-search-forward inline-cr-header-regex end t)
       (let* ((head-start (line-beginning-position))
              (head-end (line-end-position))
              ;; Check for actionable property on any character in the head
