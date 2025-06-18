@@ -67,11 +67,11 @@
 
 
 (defface inline-cr-block-face
-  '((t (:background "#D9FFE2")))
+  '((t (:foreground "black" :background "#D9FFE2")))
   "Face for non-actionable inline code review blocks.")
 
 (defface inline-cr-actionable-block-face
-  '((t (:background "#F4B9D7")))
+  '((t (:foreground "black" :background "#F4B9D7")))
   "Face for actionable inline Scode review blocks.")
 
 
@@ -126,7 +126,6 @@
                (whom (match-string 3))
                (beg (match-beginning 0))
                (end (match-end 0)))
-          (message (match-string 0))
           (if (or
                (and (string= kind "CR")
                     (string= whom inline-cr-user))
@@ -195,7 +194,7 @@ Otherwise, insert plain newline."
     (let ((user inline-cr-user))
       (forward-line 1)
       (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
-      ;; TODO this sucks bc it makes a dumb ass html comment in md
+
       (if (eq (point) (point-max)) (insert "\n"))
       (insert (format "%s> %s: " (or comment-start "") user))
       (recenter)))
@@ -203,9 +202,15 @@ Otherwise, insert plain newline."
    ;; Case 2: Inside thread → insert new line with "> "
    ((save-excursion
       (beginning-of-line)
-      (looking-at "^.*> "))
-    (end-of-line)
-    (insert (format "\n%s> " (or comment-start ""))))
+      (looking-at "^.*>.*"))
+    (let ((user inline-cr-user))
+      (forward-line 1)
+      (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
+
+      (if (eq (point) (point-max)) (insert "\n"))
+      (insert (format "%s> " (or comment-start "") user))
+      (recenter)))    
+
 
    ;; Case 3: Else → insert regular newline
    (t
@@ -227,7 +232,8 @@ Otherwise, insert plain newline."
     (cond
      ((looking-at "^.*> CR ") (replace-match ( format "%s> XCR " (or comment-start ""))))
      ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-start ""))))     
-     (t (user-error "Not inside a CR/XCR comment thread")))))
+     (t (user-error "Not inside a CR/XCR comment thread"))))
+  (inline-cr--refresh-display))
 
 
 ;;;###autoload
