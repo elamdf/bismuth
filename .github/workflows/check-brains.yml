@@ -1,0 +1,51 @@
+name: Require Identical Brain Branches
+
+on:
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  check-identical-brains:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract PR and base branches
+        id: vars
+        run: |
+          echo "pr_branch=${{ github.head_ref }}" >> $GITHUB_OUTPUT
+          echo "base_branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+
+      - name: Fetch all remote branches
+        run: git fetch --all
+
+      - name: Verify all brain branches are identical
+        # TODO check that crs have been resolved too (i.e. that there are none left)
+        run: |
+          PR_BRANCH="${{ steps.vars.outputs.pr_branch }}"
+          BASE_BRANCH="${{ steps.vars.outputs.base_branch }}"
+          PREFIX="${PR_BRANCH}-brain-"
+
+          echo "Checking for brain branches matching: ${PREFIX}*"
+          BRAIN_BRANCHES=$(git branch -r | grep "origin/${PREFIX}" | sed 's|origin/||')
+
+          if [ -z "$BRAIN_BRANCHES" ]; then
+            echo "No brain branches found — passing."
+            exit 0
+          fi
+
+          for BR in $BRAIN_BRANCHES; do
+            echo "Comparing $PR_BRANCH with $BR..."
+            if ! git diff --quiet "origin/$BR" "origin/$PR_BRANCH"; then
+              echo "::error::Mismatch with brain branch: $BR"
+              exit 1
+            fi
+          done
+
+          echo "All brain branches match — passing."
+
+
