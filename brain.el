@@ -17,10 +17,10 @@
   "Current user name used in brain branch naming.")
 
 ;; TODO we need to save these in magit somewhere..
-(defvar brain-target-branch (or (getenv "USER") "user")
+(defvar brain-target-branch "main"
   "Default target branch. Hardcoded for now.")
 
-(defvar brain-remote (or (getenv "USER") "user")
+(defvar brain-remote "origin"
   "Default remote. Hardcoded for now.")
   
 ;; TODO not hardcoding this. needs to be encoded in the state of a brain repo somewhere
