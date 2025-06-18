@@ -157,13 +157,15 @@
 (defun brain-toggle-feature-branch ()
   "Switch between a feature branch and its brain branch, opening the appropriate worktree."
   (interactive)
-  (let* ((current (magit-get-current-branch))
+  (let* ((magit-display-buffer-function 'magit-display-buffer-same-window-except-diff-v1)
+         (current (magit-get-current-branch))
          (user (or (getenv "USER") "user"))
          (is-brain (string-match (format "-brain-%s\\'" user) current))
 
          (base (if is-brain
                    (replace-regexp-in-string (format "-brain-%s" user) "" current)
                  current))
+         ;; TODO offer to create brain if doesn't exist
          (target (if is-brain base (format "%s-brain-%s" base user)))
 
          (dir (worktree-dir-for-branch target)))
