@@ -1,3 +1,4 @@
+
 ;;; inline-cr.el --- Lightweight inline code review tools -*- lexical-binding: t; -*-
 
 ;; Author: elam + (mostly) chatgpt
@@ -63,6 +64,16 @@
 (defface inline-cr-nonactionable-face
   '((t :foreground "gray50"))
   "Face for non-actionable CR/XCR lines.")
+
+
+(defface inline-cr-block-face
+  '((t (:background "#D9FFE2")))
+  "Face for non-actionable inline code review blocks.")
+
+(defface inline-cr-actionable-block-face
+  '((t (:background "#F4B9D7")))
+  "Face for actionable inline Scode review blocks.")
+
 
 (defun inline-cr--apply-actionable-overlay (start limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
@@ -217,21 +228,6 @@ Otherwise, insert plain newline."
      ((looking-at "^.*> CR ") (replace-match ( format "%s> XCR " (or comment-start ""))))
      ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-start ""))))     
      (t (user-error "Not inside a CR/XCR comment thread")))))
-
-
-
-
-
-
-
-
-
-;;;###autoload
-(defun inline-cr-enable-in-reviewable-modes ()
-  "Enable inline-cr-mode in markdown and org files."
-  (when (derived-mode-p 'markdown-mode 'org-mode)
-    (inline-cr-mode)))
-
 
 
 ;;;###autoload
@@ -400,17 +396,9 @@ Otherwise, insert plain newline."
 
 
 
-(defface inline-cr-block-face
-  '((t (:inherit markdown-pre-face :extend t)))
-  "Face for non-actionable inline code review blocks.")
-
-(defface inline-cr-actionable-block-face
-  '((t (:inherit markdown-pre-face :background "#3b4252" :extend t)))
-  "Face for actionable inline code review blocks.")
 
 
 ;; TODO (elamdf) this should do markdown formatting even in non-markdown files
-
 (defun inline-cr--highlight-thread (start end)
   "Apply background face to CR/XCR thread from START to END.
 If the head has `inline-cr-actionable` property, use the actionable face."
@@ -477,11 +465,11 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 
 ;; enable inline comments by default for some filetypes
 ;;;###autoload
-(add-hook 'markdown-mode-hook #'inline-cr-enable-in-reviewable-modes)
+(add-hook 'markdown-mode-hook #'inline-cr-mode)
 ;;;###autoload
-(add-hook 'org-mode-hook #'inline-cr-enable-in-reviewable-modes)
+(add-hook 'org-mode-hook #'inline-cr-mode)
 ;;;###autoload
-(add-hook 'c-mode-hook #'inline-cr-enable-in-reviewable-modes)
+(add-hook 'c-mode-hook #'inline-cr-mode)
 
 
 
