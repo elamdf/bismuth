@@ -45,6 +45,7 @@ if [[ $function == "create" ]]; then
     mkdir -p $brain_dir
     git worktree add -b ${brain_branch} ${brain_dir} ${target}
     pushd $brain_dir
+    git push origin HEAD:$brain_branch
     # brain files should not be manually modified
     chmod -w *    
     echo "brain created at $brain_dir "
@@ -59,21 +60,23 @@ elif [[ $function == "update" ]]; then
 
     # first, add to brain main since we're going to assume they're ok (since htey're in main)
     # TODO test this
-    git diff -R $feature > feature_diff.patch
-    git diff -R $target > target_diff.patch
+    git diff -R $feature > feature_diff.BRAIN
+    git diff -R $target > target_diff.BRAIN
 
     echo "auto-reviewing diffs from $target..."
     if [ -s "filename" ]; then
-        git apply --cached target_diff.patch
+        git apply --cached target_diff.BRAIN
         git commit -m "auto-review changes from $target"
         git push origin HEAD:$brain_branch
     fi 
     
     echo "applying unreviewed diffs from $feature..."
-    git apply --intent-to-add feature_diff.patch
+    git apply --intent-to-add feature_diff.BRAIN
     # there are some like inverted staged changes after this, unstage them
     git reset
-    
+
+    # clean up
+    rm *.BRAIN
     # brain files should not be manually modified
     chmod -w *    
     echo "Brain $brain_dir reviewing $feature to merge into $remote/$target updated! review away :D"
