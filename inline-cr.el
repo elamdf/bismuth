@@ -208,7 +208,7 @@ Otherwise, insert plain newline."
       (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
 
       (if (eq (point) (point-max)) (insert "\n"))
-      (insert (format "%s> " (or comment-start "") user))
+      (insert (format "%s> " (or comment-start "")))
       (recenter)))    
 
 
