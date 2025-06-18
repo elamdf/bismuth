@@ -1,0 +1,51 @@
+* Code Reviews
+They're important!
+Especially for anything complex or collaborative
+
+People usually do them on a platform like Github,
+where there are either
+- discrete 'review' events, which contain a set of comments that might be associated with a given line of a file at the latest commit at the time of review
+- individual comments associated with a line of a file at the latest commit when that comment was active
+
+This is fine if the code is never changed after it's reviewed.
+Once the code is changed for a file,
+however,
+the comment is poisoned with an "outdated" flag and manual effort must be undergone to determine if it should be resolved or updated.
+
+
+
+* Inline code reviews
+- review comments are tracked in version control
+- no tabbing between Github and your editor when replying to, acting on, or resolving comments
+- code review comments are always 'up to date', since they're updated alongside the code
+
+** [X]CR Syntax
+A code review is left by a "reviewer" to be addressed by an "author"
+#+BEGIN_SRC’
+code code code
+[comment symbol, such as # or //] > CR reviewer for author: pls add docstring
+> It would also be good to add some `assert`s to sanity check the input
+code code code
+#+END_SRC’
+"CR reviewer for author" makes this thread actionable for the author.
+An author can either delete the comment if they're confident it's been resolved,
+or reply
+#+BEGIN_SRC’
+code code code
+[comment symbol, such as # or //] > XCR reviewer for author: pls add docstring
+> It would also be good to add some `assert`s to sanity check the input
+> author: fixed. DWR if you're happy with the changes
+code code code
+#+END_SRC’
+Note the 'bit' flip from CR to XCR.
+This makes this thread actionable for the reviewer.
+DWR (delete when read) asks the reviewer to remove (resolve) the thread when they are satisfied.
+
+
+* Brain-based code review
+Each reviewer for a given PR attempting to merge `feature` into `target` ideally has a has a 'review brain' for that PR.
+
+This review brain contains all of the diff hunks that they've reviewed and signed off on.
+This allows reviewers to continuously only review newly committed code,
+rather than having to review the entire PR every time comments are requested.
+
