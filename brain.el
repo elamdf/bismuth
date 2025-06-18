@@ -28,20 +28,32 @@
   (file-name-directory (or load-file-name buffer-file-name))
   "Root directory of the current package.")
 
+
+;; switch between feature and feature-brain
+
 (defun worktree-dir-for-branch (branch)
-  "Return the directory of the Git worktree associated with BRANCH, or nil if not found."
-  (let ((output (shell-command-to-string "git worktree list --porcelain")))
-    (when (string-match (format "branch refs/heads/%s" (regexp-quote branch)) output)
-      (save-match-data
-        (with-temp-buffer
-          (insert output)
-          (goto-char (point-min))
-          (let (found)
-            (while (and (not found) (re-search-forward "^worktree \\(.*\\)$" nil t))
-              (let ((dir (match-string 1)))
-                (when (re-search-forward (format "^branch refs/heads/%s$" (regexp-quote branch)) nil t)
-                  (setq found dir))))
-            found))))))
+  "Return the Git worktree directory for BRANCH, or nil if not found."
+  (let ((output (shell-command-to-string "git worktree list --porcelain"))
+        (case-fold-search nil))
+    (with-temp-buffer
+      (insert output)
+      (goto-char (point-min))
+      (let (dir found)
+        (while (and (not found)
+                    (re-search-forward "^worktree \\(.*\\)$" nil t))
+          (setq dir (match-string 1))
+          ;; Look ahead in the block for the matching branch line
+          (let ((block-end (or (save-excursion
+                                 (if (re-search-forward "^worktree " nil t)
+                                     (match-beginning 0)
+                                   (point-max)))
+                               (point-max))))
+            (when (re-search-forward (format "^branch refs/heads/%s$" (regexp-quote branch)) block-end t)
+              (setq found dir))))
+        found))))
+
+
+
 
 (defun path-relative-to-git-root (file)
   "Return FILE path relative to the Git root."
@@ -119,7 +131,7 @@
                 )))))
 
 
-(defun update-brain ()
+(defun brain-update ()
   "Fetch the current brain branch and run `brain-update` in the magit project root."
   (interactive)
   (let ((default-directory (magit-toplevel)))
@@ -130,11 +142,38 @@
   )
 
 (defun brain-unreplace-magit-push-pull ()
-  (advice-remove #'magit-pull #'update-brain))
+  (advice-remove #'magit-pull #'brain-update))
 
 (defun brain-replace-magit-push-pull ()
-  (advice-add #'magit-pull :override #'update-brain))
+  (advice-add #'magit-pull :override #'brain-update))
 
+;; TODO (elamdf) this should probably open the status in place as opposed to split like status normally does
+
+(with-eval-after-load 'magit
+  (transient-insert-suffix 'magit-branch "b" ; after branch commands
+    '("g" "Switch brain/feature" brain-toggle-feature-branch)))
+
+;; toggle between brain and feature easily
+(defun brain-toggle-feature-branch ()
+  "Switch between a feature branch and its brain branch, opening the appropriate worktree."
+  (interactive)
+  (let* ((current (magit-get-current-branch))
+         (user (or (getenv "USER") "user"))
+         (is-brain (string-match (format "-brain-%s\\'" user) current))
+
+         (base (if is-brain
+                   (replace-regexp-in-string (format "-brain-%s" user) "" current)
+                 current))
+         (target (if is-brain base (format "%s-brain-%s" base user)))
+
+         (dir (worktree-dir-for-branch target)))
+    (if (and dir (file-directory-p dir))
+        (magit-status dir)
+      (user-error "Worktree for branch '%s' not found" target))))
+
+
+
+;; TODO (elamdf) update brain after pushing from feature branch
 
 (defun brain--add-status-section ()
   "Add a Brain Mode section to the Magit status buffer."
@@ -143,7 +182,6 @@
       (insert (propertize (format "[Brain Mode Active] Reviewing branch: %s \n" (brain--feature-branch))
                           'face '(:foreground "cyan" :weight bold)))
       (insert "\n")))))
-
 
 ;;;###autoload
 (define-minor-mode brain-mode
@@ -155,6 +193,7 @@
         (message "brain-mode enabled")
         (brain-replace-magit-push-pull)
         (add-hook 'magit-status-sections-hook #'brain--add-status-section)
+        
         )
     (brain-unreplace-magit-push-pull)    
 
