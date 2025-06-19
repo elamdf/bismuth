@@ -296,7 +296,6 @@ Otherwise, insert plain newline."
 
 (defvar inline-cr--mention-buffer "*Inline CR Mentions*")
 
-
 (defun inline-cr--collect-cr-mentions ()
   "Return a list of (FILE LINE-NUM TEXT) for actionable CR/XCR threads in .org and .md files."
   (unless (projectile-project-p)
@@ -453,6 +452,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     map)
   "Keymap for inline-cr-mode.")
 
+(defun inline-cr--refresh-display-rest (&rest _)
+  (inline-cr--refresh-display))
+
 ;;;###autoload
 (define-minor-mode inline-cr-mode
   "Minor mode to highlight and navigate inline code review threads."
@@ -460,23 +462,19 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   :keymap inline-cr-mode-map
   (if inline-cr-mode
       (progn
-        (jit-lock-register #'inline-cr--scan-for-actionables))
-    (jit-lock-unregister #'inline-cr--scan-for-actionables)
-    (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))))
-
-;; HOOKS 
-(add-hook 'inline-cr-mode-hook #'inline-cr--refresh-display)
-(add-hook 'after-change-functions
-          (lambda (&rest _) (inline-cr--refresh-display)))
-
-;; enable inline comments by default for some filetypes
-;;;###autoload
-(add-hook 'markdown-mode-hook #'inline-cr-mode)
-;;;###autoload
-(add-hook 'org-mode-hook #'inline-cr-mode)
-;;;###autoload
-(add-hook 'c-mode-hook #'inline-cr-mode)
-
+        (jit-lock-register #'inline-cr--scan-for-actionables)
+        (add-hook 'after-change-functions
+                  #'inline-cr--refresh-display-rest)
+        (inline-cr--refresh-display)
+        )
+    (progn 
+      (jit-lock-unregister #'inline-cr--scan-for-actionables)
+        (remove-hook 'after-change-functions
+                     #'inline-cr--refresh-display-rest)
+        (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))
+        (inline-cr--refresh-display)
+        )
+      ))
 
 
 (provide 'inline-cr)
