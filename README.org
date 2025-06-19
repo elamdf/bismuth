@@ -56,7 +56,7 @@ code code code
 #+END_SRC’
 and so on.
 
-** How Bismuth enables Makes Code Reviews Easier
+** How Bismuth Makes Code Reviews Easier
 For now, Bismuth provides some nice highlighting for actionable/nonactionable review threads,
 as well as keybindings and utility functions to navigate and aggregate said threads.
 
@@ -71,7 +71,7 @@ Here is the current default keymap.
 #+END_SRC
 See the source in ~inline-cr.el~ for more information.
 
-* Brain-based code review
+* Brain-Based Code Review
 Each reviewer for a given PR attempting to merge `feature` into `target` ideally has a has a 'review brain' for that PR.
 
 This review brain collects all of the diff hunks that they've reviewed and signed off on.
@@ -80,8 +80,14 @@ which exists as a worktree on the reviewer's machine and contains unstaged versi
 This clearly exposes the branch's diff to trunk,
 and allows chunks to be 'signed off on' by the reviewer
 
-A PR is considered fully reviewed when all feature-brain-* branches are identical to the feature branch.
-An example ~asd~
+A PR is considered fully reviewed when all feature-brain-* branches are identical to the feature branch,
+indicating that all diffs in the feature branch have been reviewed.
+An example Github CI workflow in ~.github/workflows/check-brains.yml~ enforces that all pushed =brain= s for a given feature branch contain all diff hunks in the feature.
+
+** How Bismuth Makes Brain-Based Code Review Eaiser
+The current scripts assume that any changes to the =target= branch don't need to be re-reviewed,
+and are automatically added to the brain.
+This means that merging (or rebasing) =target= into =feature= will only require review of merge conflict resolutions.
 
 This allows reviewers to continuously only review newly committed code,
 rather than having to review the entire PR every time comments are requested.
