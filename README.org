@@ -56,6 +56,21 @@ code code code
 #+END_SRC’
 and so on.
 
+** How Bismuth enables Makes Code Reviews Easier
+For now, Bismuth provides some nice highlighting for actionable/nonactionable review threads,
+as well as keybindings and utility functions to navigate and aggregate said threads.
+
+Here is the current default keymap.
+#+BEGIN_SRC
+(define-key map (kbd "C-c C-n") #'inline-cr-next-actionable)
+(define-key map (kbd "C-c C-p") #'inline-cr-prev-actionable)
+(define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
+(define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)
+(define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
+(define-key map (kbd "RET") #'inline-cr-jump-to-thread-end)
+#+END_SRC
+See the source in ~inline-cr.el~ for more information.
+
 * Brain-based code review
 Each reviewer for a given PR attempting to merge `feature` into `target` ideally has a has a 'review brain' for that PR.
 
