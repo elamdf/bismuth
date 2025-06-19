@@ -92,3 +92,5 @@ This means that merging (or rebasing) =target= into =feature= will only require 
 This allows reviewers to continuously only review newly committed code,
 rather than having to review the entire PR every time comments are requested.
 
+* Installation
+clone this repo!
