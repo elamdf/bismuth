@@ -110,7 +110,6 @@
       buf)))
 
 
-
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
 
@@ -194,22 +193,21 @@ Otherwise, insert plain newline."
     (let ((user inline-cr-user))
       (forward-line 1)
       (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
-
-      (if (eq (point) (point-max)) (insert "\n"))
-      (insert (format "%s> %s: " (or comment-start "") user))
+      (forward-line -1)
+      (goto-char (point-at-eol))
+      (insert (format "\n%s> %s: " (or comment-start "") user))
       (recenter)))
 
    ;; Case 2: Inside thread → insert new line with "> "
    ((save-excursion
       (beginning-of-line)
       (looking-at "^.*>.*"))
-    (let ((user inline-cr-user))
-      (forward-line 1)
-      (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
+      (goto-char (point-at-eol))
+      (insert (format "\n%s> " (or comment-start "")))
+      (recenter))
 
-      (if (eq (point) (point-max)) (insert "\n"))
-      (insert (format "%s> " (or comment-start "")))
-      (recenter)))    
+   ;; TODO if user is at end of thread and on a line with an empty thread, RET should probably remove the >
+   ;; but that might be an annoying behavior. they can always do C-o
 
 
    ;; Case 3: Else → insert regular newline
@@ -231,9 +229,9 @@ Otherwise, insert plain newline."
     (beginning-of-line)
     (cond
      ((looking-at "^.*> CR ") (replace-match ( format "%s> XCR " (or comment-start ""))))
-     ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-start ""))))     
-     (t (user-error "Not inside a CR/XCR comment thread"))))
-  (inline-cr--refresh-display))
+     ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-t ""))))
+     (start (user-error "Not inside a CR/XCR comment thread")))
+  (inline-cr--refresh-display)))
 
 
 ;;;###autoload
