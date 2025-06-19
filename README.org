@@ -1,3 +1,8 @@
+* Bismuth
+Bismuth is a collection of scripts to make brain-based, inline code reviews easy.
+It is heavily inspired by [[https://www.youtube.com/watch?v=MUqvXHEjmus][this]] talk from Jane Street about Iron,
+their internal code review platform.
+
 * Code Reviews
 They're important!
 Especially for anything complex or collaborative
@@ -40,12 +45,29 @@ code code code
 Note the 'bit' flip from CR to XCR.
 This makes this thread actionable for the reviewer.
 DWR (delete when read) asks the reviewer to remove (resolve) the thread when they are satisfied.
-
+If the reviewer is not satisfied, they can flip the bit back
+#+BEGIN_SRC’
+code code code
+[comment symbol, such as # or //] > CR reviewer for author: pls add docstring
+> It would also be good to add some `assert`s to sanity check the input
+> author: fixed. DWR if you're happy with the changes
+> reviewer: pls fix the typo in the function name and DWR
+code code code
+#+END_SRC’
+and so on.
 
 * Brain-based code review
 Each reviewer for a given PR attempting to merge `feature` into `target` ideally has a has a 'review brain' for that PR.
 
-This review brain contains all of the diff hunks that they've reviewed and signed off on.
+This review brain collects all of the diff hunks that they've reviewed and signed off on.
+This is currently represented as a branch called feature-brain-$USER,
+which exists as a worktree on the reviewer's machine and contains unstaged versions of all changes in the branch.
+This clearly exposes the branch's diff to trunk,
+and allows chunks to be 'signed off on' by the reviewer
+
+A PR is considered fully reviewed when all feature-brain-* branches are identical to the feature branch.
+An example ~asd~
+
 This allows reviewers to continuously only review newly committed code,
 rather than having to review the entire PR every time comments are requested.
 
