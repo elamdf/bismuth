@@ -218,7 +218,6 @@
       (forward-line -1)
 
 
-      (warn last-author)
       (goto-char (line-end-position))      
       (insert (if (and last-author (not (string= last-author user)))
                   (format "\n%s> %s: " prefix user)
@@ -460,7 +459,6 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   (inline-cr--highlight-thread (point-min) (point-max)))
 
 (defun inline-cr--cleanup ()
-  (warn "AAA")
   (remove-overlays (point-min) (point-max) 'inline-cr t)  
   )
 
