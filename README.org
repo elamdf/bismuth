@@ -93,4 +93,10 @@ This allows reviewers to continuously only review newly committed code,
 rather than having to review the entire PR every time comments are requested.
 
 * Installation
-clone this repo!
+Clone this repo, add =bismuth= to your =load-path=, and add
+#+BEGIN_SRC
+(require 'inline-cr)
+(require 'brain)
+#+END_SRC
+To your =init.el=!
+You can check out ~bismuth-example-config.el~ for some settings that you might want to use.
