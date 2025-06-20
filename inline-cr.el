@@ -1,11 +1,10 @@
-
 ;;; inline-cr.el --- Lightweight inline code review tools -*- lexical-binding: t; -*-
 
-;; Author: elam + (mostly) chatgpt
+;; Author: Elam Day-Friedland <elamdf@berkeley.edu>
 ;; Version: 0.4
 ;; Package-Requires: ((emacs "26.1"))
 ;; Keywords: code-review, navigation, review
-;; URL: https://github.com/elamdf/inline-cr
+;; URL: https://github.com/elamdf/bismuth
 
 ;;; Commentary:
 
@@ -32,10 +31,14 @@
   "Inline code review utilities."
   :group 'tools)
 
-(defcustom inline-cr-header-regex  "^.*> \\(\\(?:X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):"
+(defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
-  :type 'string
-  :group 'inline-cr)
+  (format  "^\s*%s\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*" (or comment-start "")))
+(defun inline-cr-thread-regex ()
+  "Regex to match non-header lines of an inline CR, optionally capturing an author name."
+  (format "^\s*%s\s*>\s*\\(\\(\\S-*\\):\\)?.*" (or comment-start "")))
+
+;; TODO C-RET to make a cr. TODO figure out author smartly
 
 (defcustom inline-cr-user(getenv "USER")
   "Username used to determine which comments require your response."
@@ -79,7 +82,7 @@
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
   (save-excursion
     (goto-char start)  
-    (while (re-search-forward inline-cr-header-regex nil t)
+    (while (re-search-forward (inline-cr-header-regex) nil t)
       (let ((start (match-beginning 0))
             (end (match-end 0)))
         (when (get-text-property start 'inline-cr-actionable)
@@ -119,7 +122,7 @@
 
     (let ((case-fold-search nil))
 
-      (while (re-search-forward inline-cr-header-regex nil t)
+      (while (re-search-forward (inline-cr-header-regex) nil t)
         (let* ((kind (match-string 1)) ;; "CR" or "XCR"
                (who (match-string 2))
                (whom (match-string 3))
@@ -180,39 +183,57 @@
   "Return t if point is on a CR or XCR header line."
   (save-excursion
     (beginning-of-line)
-    (looking-at "^.*> \\(C\\|XC\\)R ")))
+    (looking-at (inline-cr-header-regex))))
 
-(defun inline-cr-jump-to-thread-end ()
-  "Smart RET: If on CR/XCR header, jump to end and insert reply.
-If already inside a thread, insert newline prefixed with '> '.
-Otherwise, insert plain newline."
+
+(defun inline-cr--at-thread-body-p ()
+  "Return t if point is on a CR or XCR header line."
+  (save-excursion
+    (beginning-of-line)
+    (looking-at (inline-cr-thread-regex))))
+
+
+(defun inline-cr-maybe-insert-within-thread ()
+  "Smart RET within an inline CR thread.
+
+- If point is on a thread header, jump to end and insert a reply.
+- If already in a thread, insert '> ' or '> user:'.
+- Only prefix with '> user:' if the last authored line was not by `inline-cr-user`.
+- Otherwise insert '> '.
+- Outside a thread, insert a normal newline."
   (interactive)
-  (cond
-   ;; Case 1: On thread header → jump to end and insert "> user: "
-   ((inline-cr--at-thread-header-p)
-    (let ((user inline-cr-user))
-      (forward-line 1)
-      (while (and (not (eobp)) (looking-at "^.*> ")) (forward-line 1))
+  (let ((user inline-cr-user)
+        (prefix (or comment-start ""))
+        (last-author nil))
+    (cond
+     ;; Case 1: On header → go to end of thread and decide whether to prefix user
+     ( (or (inline-cr--at-thread-header-p) (inline-cr--at-thread-body-p))
+
+      ;; (save-excursion
+        (forward-line 1)
+        (while (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
+      (when (match-string 2)
+        (setq last-author (match-string 2)))
+      (forward-line 1))
       (forward-line -1)
-      (goto-char (point-at-eol))
-      (insert (format "\n%s> %s: " (or comment-start "") user))
-      (recenter)))
-
-   ;; Case 2: Inside thread → insert new line with "> "
-   ((save-excursion
-      (beginning-of-line)
-      (looking-at "^.*>.*"))
-      (goto-char (point-at-eol))
-      (insert (format "\n%s> " (or comment-start "")))
-      (recenter))
-
-   ;; TODO if user is at end of thread and on a line with an empty thread, RET should probably remove the >
-   ;; but that might be an annoying behavior. they can always do C-o
 
 
-   ;; Case 3: Else → insert regular newline
-   (t
-    (call-interactively #'newline))))
+      (warn last-author)
+      (goto-char (line-end-position))      
+      (insert (if (and last-author (not (string= last-author user)))
+                  (format "\n%s> %s: " prefix user)
+                (format "\n%s> " prefix)))
+      (goto-char (line-end-position))
+      )
+
+     ;; Case 3: Fallback
+     (t
+      (call-interactively #'newline)))))
+
+
+
+
+
 
 
 
@@ -224,12 +245,12 @@ Otherwise, insert plain newline."
     (while (and (not (bobp))
                 (save-excursion
                   (forward-line -1)
-                  (looking-at "^.*> ")))
+                  (looking-at (inline-cr-thread-regex))))
       (forward-line -1))
     (beginning-of-line)
     (cond
      ((looking-at "^.*> CR ") (replace-match ( format "%s> XCR " (or comment-start ""))))
-     ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-t ""))))
+     ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-start ""))))
      (start (user-error "Not inside a CR/XCR comment thread")))
   (inline-cr--refresh-display)))
 
@@ -278,15 +299,15 @@ Otherwise, insert plain newline."
       (while (and (not (bobp))
                   (save-excursion
                     (forward-line -1)
-                    (looking-at "^.*> ")))
+                    (looking-at (inline-cr-thread-regex))))
         (forward-line -1))
-      (when (looking-at "^.*> \\(C\\|XC\\)R ")
+      (when (looking-at (inline-cr-header-regex))
         (setq start (point))
         ;; Move to end of thread
         (while (and (not (eobp))
                     (progn
                       (forward-line 1)
-                      (looking-at "^.*> "))))
+                      (looking-at (inline-cr-thread-regex)))))
         (setq end (point))
         (cons start end)))))
 
@@ -407,7 +428,7 @@ Otherwise, insert plain newline."
 If the head has `inline-cr-actionable` property, use the actionable face."
   (save-excursion
     (goto-char start)
-    (while (re-search-forward inline-cr-header-regex end t)
+    (while (re-search-forward (inline-cr-header-regex) end t)
       (let* ((head-start (line-beginning-position))
              (head-end (line-end-position))
              ;; Check for actionable property on any character in the head
@@ -432,11 +453,16 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 
 (defun inline-cr--refresh-display ()
   "Refresh visual display of inline CRs."
+  ;; TODO this may be overkill, but I don't really understand how the jit stuff works
+  (inline-cr--scan-for-actionables (point-min) (point-max))  
   (remove-overlays (point-min) (point-max) 'inline-cr t)
   (inline-cr--apply-actionable-overlay (point-min) (point-max))
   (inline-cr--highlight-thread (point-min) (point-max)))
 
-
+(defun inline-cr--cleanup ()
+  (warn "AAA")
+  (remove-overlays (point-min) (point-max) 'inline-cr t)  
+  )
 
 ;; kbd map
 (defvar inline-cr-mode-map
@@ -446,7 +472,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
     (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)    
     (define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
-    (define-key map (kbd "RET") #'inline-cr-jump-to-thread-end)
+    (define-key map (kbd "RET") #'inline-cr-maybe-insert-within-thread)
     map)
   "Keymap for inline-cr-mode.")
 
@@ -469,8 +495,8 @@ If the head has `inline-cr-actionable` property, use the actionable face."
       (jit-lock-unregister #'inline-cr--scan-for-actionables)
         (remove-hook 'after-change-functions
                      #'inline-cr--refresh-display-rest)
-        (remove-text-properties (point-min) (point-max) '(inline-cr-actionable nil))
-        (inline-cr--refresh-display)
+
+        (inline-cr--cleanup)
         )
       ))
 
