@@ -124,15 +124,15 @@
 
       (while (re-search-forward (inline-cr-header-regex) nil t)
         (let* ((kind (match-string 1)) ;; "CR" or "XCR"
-               (who (match-string 2))
-               (whom (match-string 3))
+               (who (match-string 3))
+               (whom (match-string 4))
                (beg (match-beginning 0))
                (end (match-end 0)))
           (if (or
                (and (string= kind "CR")
                     (string= whom inline-cr-user))
                (and (string= kind "XCR")
-                    (string= who inline-cr-user)))
+                    (string= who inline-cr-user)))xo
               (put-text-property beg end 'inline-cr-actionable t)
             (put-text-property beg end 'inline-cr-actionable nil)))))))
 
