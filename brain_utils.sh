@@ -48,7 +48,7 @@ if [[ $function == "create" ]]; then
     git push origin HEAD:$brain_branch
     # brain files should not be manually modified
     chmod -w *    
-    echo "brain created at $brain_dir "
+    echo "brain for $feature created at $brain_dir "
 elif [[ $function == "update" ]]; then
     # note that we're always updating feature to only be the rmote. TODO maybe should sync local via rsync so we don't have to commit all review comments. maybe that's the right way to do it though
 

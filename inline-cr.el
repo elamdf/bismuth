@@ -88,6 +88,7 @@
         (when (get-text-property start 'inline-cr-actionable)
           (let ((ov (make-overlay start end)))
             (overlay-put ov 'face 'inline-cr-actionable-face)
+            (overlay-put ov 'priority 2)  ;; Higher priority than text color 
             (overlay-put ov 'inline-cr t)))
         (unless (get-text-property start 'inline-cr-actionable)
           (let ((ov (make-overlay start end)))
@@ -132,7 +133,7 @@
                (and (string= kind "CR")
                     (string= whom inline-cr-user))
                (and (string= kind "XCR")
-                    (string= who inline-cr-user)))xo
+                    (string= who inline-cr-user)))
               (put-text-property beg end 'inline-cr-actionable t)
             (put-text-property beg end 'inline-cr-actionable nil)))))))
 
@@ -193,7 +194,13 @@
     (looking-at (inline-cr-thread-regex))))
 
 
-(defun inline-cr-maybe-insert-within-thread ()
+(defun inline-cr-insert-review-comment ()
+      (goto-char (line-end-position))
+  (insert (format "\n> CR %s for " inline-cr-user))
+
+  )
+
+(defun inline-cr-maybe-extend-thread ()
   "Smart RET within an inline CR thread.
 
 - If point is on a thread header, jump to end and insert a reply.
@@ -435,9 +442,10 @@ If the head has `inline-cr-actionable` property, use the actionable face."
              (face (if actionable
                        'inline-cr-actionable-block-face
                      'inline-cr-block-face)))
-        ;; Highlight head line
+        ;; Highlight head line, but with a lower priority than the actionable highlight
         (let ((ov (make-overlay head-start head-end)))
           (overlay-put ov 'face face)
+            (overlay-put ov 'priority 1)
           (overlay-put ov 'inline-cr t))
         ;; Highlight thread body
         (forward-line 1)
@@ -446,9 +454,6 @@ If the head has `inline-cr-actionable` property, use the actionable face."
             (overlay-put ov 'face face)
             (overlay-put ov 'inline-cr t))
           (forward-line 1))))))
-
-
-
 
 (defun inline-cr--refresh-display ()
   "Refresh visual display of inline CRs."

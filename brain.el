@@ -9,14 +9,13 @@
 ;;     (magit "2.90.1"))
 
 ;;; Commentary:
+; This minor mode Magit status. If the current branch ends
+; in "brain-$USER", it enables `brain-mode`, which replaces Magit push
+; and pull behavior and adds utilities for managing review patches.
 
-;; This minor mode Magit status. If the current branch ends
-;; in "brain-$USER", it enables `brain-mode`, which replaces Magit push
-;; and pull behavior and adds utilities for managing review patches.
+;; Code:
 
-;;; Code:
-
-;;;; Configuration Variables
+;;; Configuration Variables
 
 (defvar brain-user (or (getenv "USER") "user")
   "Current user name used in brain branch naming.")
