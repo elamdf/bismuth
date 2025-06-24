@@ -15,8 +15,8 @@
 ;;   > name: comment                    ;; reply
 
 ;; Keybindings:
-;;   C-c C-n  → next actionable comment (wraps)
-;;   C-c C-p  → previous actionable comment (wraps)
+;;   M-n  → next actionable comment (wraps)
+;;   M-p  → previous actionable comment (wraps)
 ;;   C-c RET  → toggle CR/XCR at point
 ;;   C-c t  → list all CR/XCR lines involving youa
 ;;   RET      → jump to end of comment thread and insert "> you: "
@@ -81,14 +81,14 @@
 (defun inline-cr--apply-actionable-overlay (start limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
   (save-excursion
-    (goto-char start)  
+    (goto-char (point-min))
     (while (re-search-forward (inline-cr-header-regex) nil t)
       (let ((start (match-beginning 0))
             (end (match-end 0)))
         (when (get-text-property start 'inline-cr-actionable)
           (let ((ov (make-overlay start end)))
             (overlay-put ov 'face 'inline-cr-actionable-face)
-            (overlay-put ov 'priority 2)  ;; Higher priority than text color 
+            (overlay-put ov 'priority 2)  ;; Higher priority than text color
             (overlay-put ov 'inline-cr t)))
         (unless (get-text-property start 'inline-cr-actionable)
           (let ((ov (make-overlay start end)))
@@ -117,7 +117,7 @@
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
 
-  
+
   (save-excursion
     (goto-char start)
 
@@ -225,7 +225,7 @@
       (forward-line -1)
 
 
-      (goto-char (line-end-position))      
+      (goto-char (line-end-position))
       (insert (if (and last-author (not (string= last-author user)))
                   (format "\n%s> %s: " prefix user)
                 (format "\n%s> " prefix)))
@@ -243,9 +243,10 @@
 
 
 
-(defun inline-cr-toggle-cr-xcr ()
+(defun inline-cr-maybe-toggle-cr-xcr ()
   "Toggle the CR/XCR tag at the start of the current review thread."
   (interactive)
+  (if (or (inline-cr--at-thread-header-p) (inline-cr--at-thread-body-p))
   (save-excursion
     ;; Move upward until not a >-prefixed line, or we hit BOF
     (while (and (not (bobp))
@@ -257,8 +258,8 @@
     (cond
      ((looking-at "^.*> CR ") (replace-match ( format "%s> XCR " (or comment-start ""))))
      ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-start ""))))
-     (start (user-error "Not inside a CR/XCR comment thread")))
-  (inline-cr--refresh-display)))
+     ())
+  (inline-cr--refresh-display))))
 
 
 ;;;###autoload
@@ -336,7 +337,7 @@
         (when (file-readable-p full-path)
           (with-temp-buffer
             (message "inline-cr: checking %s as user %s" full-path inline-cr-user)
-            
+
             (insert-file-contents full-path)
             (delay-mode-hooks (normal-mode t))
             ;; Annotate actionables
@@ -458,24 +459,25 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (defun inline-cr--refresh-display ()
   "Refresh visual display of inline CRs."
   ;; TODO this may be overkill, but I don't really understand how the jit stuff works
-  (inline-cr--scan-for-actionables (point-min) (point-max))  
+  (inline-cr--scan-for-actionables (point-min) (point-max))
   (remove-overlays (point-min) (point-max) 'inline-cr t)
   (inline-cr--apply-actionable-overlay (point-min) (point-max))
   (inline-cr--highlight-thread (point-min) (point-max)))
 
 (defun inline-cr--cleanup ()
-  (remove-overlays (point-min) (point-max) 'inline-cr t)  
+  (remove-overlays (point-min) (point-max) 'inline-cr t)
   )
 
 ;; kbd map
 (defvar inline-cr-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-n") #'inline-cr-next-actionable)
-    (define-key map (kbd "C-c C-p") #'inline-cr-prev-actionable)
+    (define-key map (kbd "M-n") #'inline-cr-next-actionable)
+    (define-key map (kbd "M-p") #'inline-cr-prev-actionable)
     (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
-    (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)    
-    (define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
-    (define-key map (kbd "RET") #'inline-cr-maybe-insert-within-thread)
+    (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)
+    (define-key map (kbd "C-c RET") #'inline-cr-maybe-toggle-cr-xcr)
+    (define-key map (kbd "RET") #'inline-cr-maybe-extend-thread)
+    (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
     map)
   "Keymap for inline-cr-mode.")
 
@@ -494,7 +496,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
                   #'inline-cr--refresh-display-rest)
         (inline-cr--refresh-display)
         )
-    (progn 
+    (progn
       (jit-lock-unregister #'inline-cr--scan-for-actionables)
         (remove-hook 'after-change-functions
                      #'inline-cr--refresh-display-rest)
@@ -507,7 +509,3 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (provide 'inline-cr)
 
 ;;; inline-cr.el ends here
-
-
-
-
