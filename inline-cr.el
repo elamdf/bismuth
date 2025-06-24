@@ -34,9 +34,13 @@
 (defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
   (format  "^\s*%s\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*" (or comment-start "")))
+(defun inline-cr-tk-regex ()
+  "Regex to match the mentioned user in a TK or TODO comment."
+  (format  "^\s*%s\s*> \\(\\TK|TODO\\) \\([^ ]+\\):.*" (or comment-start "")))
 (defun inline-cr-thread-regex ()
   "Regex to match non-header lines of an inline CR, optionally capturing an author name."
   (format "^\s*%s\s*>\s*\\(\\(\\S-*\\):\\)?.*" (or comment-start "")))
+
 
 ;; TODO C-RET to make a cr. TODO figure out author smartly
 
@@ -77,18 +81,18 @@
   '((t (:foreground "black" :background "#F4B9D7")))
   "Face for actionable inline Scode review blocks.")
 
-
+; TODO use tk-regex as well, tk/todos should be actionables
 (defun inline-cr--apply-actionable-overlay (start limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
   (save-excursion
-    (goto-char start)  
+    (goto-char start)
     (while (re-search-forward (inline-cr-header-regex) nil t)
       (let ((start (match-beginning 0))
             (end (match-end 0)))
         (when (get-text-property start 'inline-cr-actionable)
           (let ((ov (make-overlay start end)))
             (overlay-put ov 'face 'inline-cr-actionable-face)
-            (overlay-put ov 'priority 2)  ;; Higher priority than text color 
+            (overlay-put ov 'priority 2)  ;; Higher priority than text color
             (overlay-put ov 'inline-cr t)))
         (unless (get-text-property start 'inline-cr-actionable)
           (let ((ov (make-overlay start end)))
@@ -117,7 +121,7 @@
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
 
-  
+
   (save-excursion
     (goto-char start)
 
@@ -211,12 +215,16 @@
   (interactive)
   (let ((user inline-cr-user)
         (prefix (or comment-start ""))
-        (last-author nil))
+        (last-author nil)
+        (thread-bounds (inline-cr--thread-boundaries))
+        )
+
     (cond
      ;; Case 1: On header → go to end of thread and decide whether to prefix user
-     ( (or (inline-cr--at-thread-header-p) (inline-cr--at-thread-body-p))
-
-      ;; (save-excursion
+     (thread-bounds
+      (progn
+       ;; (save-excursion
+       (goto-char (car thread-bounds))
         (forward-line 1)
         (while (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
       (when (match-string 2)
@@ -225,12 +233,12 @@
       (forward-line -1)
 
 
-      (goto-char (line-end-position))      
-      (insert (if (and last-author (not (string= last-author user)))
+      (goto-char (line-end-position))
+      (insert (if (not (string= last-author user))
                   (format "\n%s> %s: " prefix user)
                 (format "\n%s> " prefix)))
       (goto-char (line-end-position))
-      )
+      ))
 
      ;; Case 3: Fallback
      (t
@@ -300,6 +308,7 @@
 (defun inline-cr--thread-boundaries ()
   "Return (START . END) of current CR/XCR thread, or nil."
   (save-excursion
+    (goto-char (line-beginning-position))
     (let (start end)
       ;; Move to top of thread
       (while (and (not (bobp))
@@ -336,7 +345,7 @@
         (when (file-readable-p full-path)
           (with-temp-buffer
             (message "inline-cr: checking %s as user %s" full-path inline-cr-user)
-            
+
             (insert-file-contents full-path)
             (delay-mode-hooks (normal-mode t))
             ;; Annotate actionables
@@ -458,13 +467,13 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (defun inline-cr--refresh-display ()
   "Refresh visual display of inline CRs."
   ;; TODO this may be overkill, but I don't really understand how the jit stuff works
-  (inline-cr--scan-for-actionables (point-min) (point-max))  
+  (inline-cr--scan-for-actionables (point-min) (point-max))
   (remove-overlays (point-min) (point-max) 'inline-cr t)
   (inline-cr--apply-actionable-overlay (point-min) (point-max))
   (inline-cr--highlight-thread (point-min) (point-max)))
 
 (defun inline-cr--cleanup ()
-  (remove-overlays (point-min) (point-max) 'inline-cr t)  
+  (remove-overlays (point-min) (point-max) 'inline-cr t)
   )
 
 ;; kbd map
@@ -473,7 +482,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     (define-key map (kbd "C-c C-n") #'inline-cr-next-actionable)
     (define-key map (kbd "C-c C-p") #'inline-cr-prev-actionable)
     (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
-    (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)    
+    (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)
     (define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
     (define-key map (kbd "RET") #'inline-cr-maybe-insert-within-thread)
     map)
@@ -494,7 +503,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
                   #'inline-cr--refresh-display-rest)
         (inline-cr--refresh-display)
         )
-    (progn 
+    (progn
       (jit-lock-unregister #'inline-cr--scan-for-actionables)
         (remove-hook 'after-change-functions
                      #'inline-cr--refresh-display-rest)
@@ -507,7 +516,3 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (provide 'inline-cr)
 
 ;;; inline-cr.el ends here
-
-
-
-
