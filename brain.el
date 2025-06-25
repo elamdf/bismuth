@@ -16,6 +16,7 @@
 ;; Code:
 
 ;;; Configuration Variables
+(require 'transient)
 
 (defvar brain-user (or (getenv "USER") "user")
   "Current user name used in brain branch naming.")
@@ -30,14 +31,32 @@
   (file-name-directory (or load-file-name buffer-file-name))
   "Root directory of the current package.")
 
-;;;; Branch and Worktree Utilities
+
+(defun brain--repo-base-name ()
+  "Return the base name of the Git repository without the .git suffix."
+  (let* ((remote-url (string-trim (shell-command-to-string "git config --get remote.origin.url")))
+         (base-name (string-trim (shell-command-to-string
+                                  (format "basename -s .git \"%s\"" remote-url)))))
+    base-name))
+
+;;; Branch and Worktree Utilities
 
 (defun brain--current-branch ()
   (magit-get-current-branch))
 
 (defun brain--is-brain-branch-p ()
   (let ((branch (brain--current-branch)))
-    (and branch (string-suffix-p (concat "brain-" brain-user) branch))))
+         (and branch (string-suffix-p (concat "brain-" brain-user) branch))))
+
+(defcustom brain-user(getenv "USER")
+  "Username used to determine who is using a brain to review."
+  :type 'string
+  :group 'brain)
+
+(defcustom brain-base-dir "~/.brains"
+  "Username used to determine where brains go by default."
+  :type 'string
+  :group 'brain)
 
 (defun brain--feature-branch ()
   "Infer the feature branch name by removing the brain suffix."
@@ -73,11 +92,12 @@
 
 ;;;; Feature <-> Brain Branch Navigation
 
-(defun brain-toggle-feature-branch ()
+
+(defun brain-toggle-worktree (&optional current)
   "Switch between a feature branch and its brain branch, opening the appropriate worktree."
   (interactive)
   (let* ((magit-display-buffer-function 'magit-display-buffer-same-window-except-diff-v1)
-         (current (brain--current-branch))
+         (current (or current (brain--current-branch)))
          (user brain-user)
          (is-brain (string-match (format "-brain-%s\\'" user) current))
          (base (if is-brain
@@ -86,11 +106,25 @@
          (target (if is-brain base (format "%s-brain-%s" base user)))
          (dir (worktree-dir-for-branch target)))
     (if (and dir (file-directory-p dir))
-        (magit-status dir)
-      (if (y-or-n-p (concat "No brain exists for branch " base ". Create one?"))
-        (create-brain)
+        (magit-status dir) ;; if exists, go there
+      (if is-brain ;; else offer to create 
+          
+          (if (y-or-n-p (concat "No feature worktree exists for branch " base ". Create one?"))
+              (let (
+                    (feat-dir (read-directory-name  "Choose feature worktree dir: " (concat brain-base-dir "/" (brain--repo-base-name) "/" (concat base "-working")) nil t))
+                )
+                (warn feat-dir)            
+            ) nil)
+        (if (y-or-n-p (concat "No brain exists for branch " base ". Create one?"))
+            (progn (brain-create)
+                   (message "brain created!")
+                   ;; TODO at what dir
+                   )
+          nil)        
+            
+         ))
         t
-        ))))
+        ))
 
 
 (defun brain--goto-feature-version (&rest args)
@@ -119,26 +153,27 @@
 (advice-add 'magit-diff-visit-file :around #'brain--visit-thing-advice)
 
 ;;;; Brain Branch Management Commands
+(defun brain--call-brain-utils (func feat targ remote brain_user brain_base_dir)
+  (call-process (concat brain--root "brain_utils.sh") nil t nil func feat targ remote brain_user brain_base_dir)
+  )
 
-(defun brain-create ()
-  "Create a new brain feature branch."
+(defun brain-create (&optional follow)
+  "Create a new brain feature branch. Optionally switch to it"
   (interactive)
-  (let ((feature-branch-inp (magit-read-branch-or-commit "Feature Branch"))
+  (let* ((feature-branch-inp (magit-read-branch-or-commit "Feature Branch"))
         (target-branch-inp (magit-read-branch-or-commit "Target Branch"))
-        (remote (magit-read-remote "Remote")))
-    (let ((feature-branch (replace-regexp-in-string (concat remote "/") "" feature-branch-inp))
+        (remote (magit-read-remote "Remote"))
+     (feature-branch (replace-regexp-in-string (concat remote "/") "" feature-branch-inp))
           (target-branch (replace-regexp-in-string (concat remote "/") "" target-branch-inp)))
-      (shell-command (concat brain--root "brain_utils.sh create "
-                             feature-branch " " target-branch " " remote)))))
+    (brain--call-brain-utils "create" feature-branch target-branch remote brain-user brain-base-dir)
+    (when follow (brain-toggle-worktree feature-branch-inp))
+    ))
 
 (defun brain-update ()
   "Update the current brain branch from its feature/target sources."
   (interactive)
   (let ((default-directory (magit-toplevel)))
-    (shell-command (concat brain--root "brain_utils.sh update "
-                           (brain--feature-branch) " "
-                           brain-target-branch " "
-                           brain-remote)))
+      (brain--call-brain-utils "create" (brain--feature-branch) brain-target-branch brain-remote brain-user brain-base-dir))
   (magit-refresh-buffer))
 
 ;;;; Magit Integration
@@ -159,9 +194,24 @@
 (defun brain-unreplace-magit-push-pull ()
   (advice-remove #'magit-pull #'brain-update))
 
+
+;; define a brain prefix
+(transient-define-prefix magit-brain (branch)
+  "Manipulate brains. mmmm.... brains..."
+  [["Brain"
+    ("b" "Toggle Brain/Feature"   brain-toggle-worktree)
+    ("n" "Create new Brain"      (lambda () (interactive) (brain-create t)))]]
+  (interactive (list (magit-get-current-branch)))
+  (transient-setup 'magit-brain nil nil :scope branch))
+
 (with-eval-after-load 'magit
-  (transient-insert-suffix 'magit-branch "b"
-    '("g" "Switch brain/feature" brain-toggle-feature-branch)))
+  (progn
+    (transient-insert-suffix 'magit-branch "b"
+      '("g" "Switch brain/feature" brain-toggle-worktree))
+    (define-key magit-mode-map (kbd "C-;") #'magit-brain)))
+
+              
+  
 
 ;;;; Minor Mode Definition
 
@@ -175,8 +225,10 @@
         (message "brain-mode enabled")
         (brain-replace-magit-push-pull)
         (add-hook 'magit-status-sections-hook #'brain--add-status-section))
+
     (brain-unreplace-magit-push-pull)
     (remove-hook 'magit-status-sections-hook #'brain--add-status-section)))
+
 
 ;;;###autoload
 (defun brain-maybe-enable ()
@@ -188,5 +240,5 @@
 (add-hook 'magit-status-mode-hook #'brain-maybe-enable)
 (add-hook 'magit-refresh-buffer-hook #'brain-maybe-enable)
 
-(provide 'brain-mode)
+(provide 'brain)
 ;;; brain-mode.el ends here

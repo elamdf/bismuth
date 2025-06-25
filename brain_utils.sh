@@ -11,6 +11,10 @@ function="$1"
 feature="$2"
 target="$3"
 remote="$4"
+# TODO better way to share consts between el and bash
+BRAIN_USER="$5"
+BRAIN_BASE_DIR="$6"
+
 
 
 repo_name=$(basename -s .git "$(git config --get remote.origin.url)")
