@@ -15,8 +15,8 @@
 ;;   > name: comment                    ;; reply
 
 ;; Keybindings:
-;;   C-c C-n  → next actionable comment (wraps)
-;;   C-c C-p  → previous actionable comment (wraps)
+;;   M-n  → next actionable comment (wraps)
+;;   M-p  → previous actionable comment (wraps)
 ;;   C-c RET  → toggle CR/XCR at point
 ;;   C-c t  → list all CR/XCR lines involving youa
 ;;   RET      → jump to end of comment thread and insert "> you: "
@@ -85,7 +85,11 @@
 (defun inline-cr--apply-actionable-overlay (start limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
   (save-excursion
+<<<<<<< HEAD
     (goto-char start)
+=======
+    (goto-char (point-min))
+>>>>>>> 008b92f81625e0229eb2484d2e3eeff5772bfc60
     (while (re-search-forward (inline-cr-header-regex) nil t)
       (let ((start (match-beginning 0))
             (end (match-end 0)))
@@ -234,7 +238,11 @@
 
 
       (goto-char (line-end-position))
+<<<<<<< HEAD
       (insert (if (not (string= last-author user))
+=======
+      (insert (if (and last-author (not (string= last-author user)))
+>>>>>>> 008b92f81625e0229eb2484d2e3eeff5772bfc60
                   (format "\n%s> %s: " prefix user)
                 (format "\n%s> " prefix)))
       (goto-char (line-end-position))
@@ -251,9 +259,10 @@
 
 
 
-(defun inline-cr-toggle-cr-xcr ()
+(defun inline-cr-maybe-toggle-cr-xcr ()
   "Toggle the CR/XCR tag at the start of the current review thread."
   (interactive)
+  (if (or (inline-cr--at-thread-header-p) (inline-cr--at-thread-body-p))
   (save-excursion
     ;; Move upward until not a >-prefixed line, or we hit BOF
     (while (and (not (bobp))
@@ -265,8 +274,8 @@
     (cond
      ((looking-at "^.*> CR ") (replace-match ( format "%s> XCR " (or comment-start ""))))
      ((looking-at "^.*> XCR ") (replace-match ( format "%s> CR " (or comment-start ""))))
-     (start (user-error "Not inside a CR/XCR comment thread")))
-  (inline-cr--refresh-display)))
+     ())
+  (inline-cr--refresh-display))))
 
 
 ;;;###autoload
@@ -479,12 +488,14 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 ;; kbd map
 (defvar inline-cr-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-n") #'inline-cr-next-actionable)
-    (define-key map (kbd "C-c C-p") #'inline-cr-prev-actionable)
+    (define-key map (kbd "M-n") #'inline-cr-next-actionable)
+    (define-key map (kbd "M-p") #'inline-cr-prev-actionable)
     (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
     (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)
-    (define-key map (kbd "C-c RET") #'inline-cr-toggle-cr-xcr)
-    (define-key map (kbd "RET") #'inline-cr-maybe-insert-within-thread)
+    (define-key map (kbd "C-c RET") #'inline-cr-maybe-toggle-cr-xcr)
+    (define-key map (kbd "RET") #'inline-cr-maybe-extend-thread)
+    (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
+
     map)
   "Keymap for inline-cr-mode.")
 
