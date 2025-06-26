@@ -238,11 +238,7 @@
 
 
       (goto-char (line-end-position))
-<<<<<<< HEAD
       (insert (if (not (string= last-author user))
-=======
-      (insert (if (and last-author (not (string= last-author user)))
->>>>>>> 008b92f81625e0229eb2484d2e3eeff5772bfc60
                   (format "\n%s> %s: " prefix user)
                 (format "\n%s> " prefix)))
       (goto-char (line-end-position))
