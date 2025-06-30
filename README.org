@@ -17,9 +17,7 @@ Once the code is changed for a file,
 however,
 the comment is poisoned with an "outdated" flag and manual effort must be undergone to determine if it should be resolved or updated.
 
-
-
-* Inline code reviews
+* Inline Code Reviews
 - review comments are tracked in version control
 - no tabbing between Github and your editor when replying to, acting on, or resolving comments
 - code review comments are always 'up to date', since they're updated alongside the code
@@ -71,7 +69,7 @@ Here is the current default keymap.
 #+END_SRC
 See the source in ~inline-cr.el~ for more information.
 
-* Brain-Based Code Review
+* Brains for Inline Code Review
 Each reviewer for a given PR attempting to merge `feature` into `target` ideally has a has a 'review brain' for that PR.
 
 This review brain collects all of the diff hunks that they've reviewed and signed off on.
