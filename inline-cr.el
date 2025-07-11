@@ -33,13 +33,13 @@
 
 (defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
-  (format  "^\s*%s\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*" (or comment-start "")))
+  (format  "^\s*\\(?:%s\\)?\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*" (or comment-start "")))
 (defun inline-cr-tk-regex ()
   "Regex to match the mentioned user in a TK or TODO comment."
-  (format  "^\s*%s\s*> \\(\\TK|TODO\\) \\([^ ]+\\):.*" (or comment-start "")))
+  (format  "^\s*\\(?:%s\\)?\s*> \\(\\TK|TODO\\) \\([^ ]+\\):.*" (or comment-start "")))
 (defun inline-cr-thread-regex ()
   "Regex to match non-header lines of an inline CR, optionally capturing an author name."
-  (format "^\s*%s\s*>\s*\\(\\(\\S-*\\):\\)?.*" (or comment-start "")))
+  (format "^\s*\\(?:%s\\)?\s*>\s*\\(\\(\\S-*\\):\\)?.*" (or comment-start "")))
 
 
 ;; TODO C-RET to make a cr. TODO figure out author smartly
