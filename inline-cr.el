@@ -65,7 +65,7 @@
   :group 'inline-cr)
 
 (defface inline-cr-actionable-face
-  '((t :weight bold :foreground "orange"))
+  '((t :weight bold :foreground "black"))
   "Face for actionable CR/XCR lines.")
 
 (defface inline-cr-nonactionable-face
@@ -85,11 +85,7 @@
 (defun inline-cr--apply-actionable-overlay (start limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
   (save-excursion
-<<<<<<< HEAD
-    (goto-char start)
-=======
     (goto-char (point-min))
->>>>>>> 008b92f81625e0229eb2484d2e3eeff5772bfc60
     (while (re-search-forward (inline-cr-header-regex) nil t)
       (let ((start (match-beginning 0))
             (end (match-end 0)))
@@ -520,6 +516,8 @@ If the head has `inline-cr-actionable` property, use the actionable face."
       ))
 
 
+;; TODO make <cr expand to > CR $user for (fill out):
+;; todo make <td expand to >CR $user for $user:
 (provide 'inline-cr)
 
 ;;; inline-cr.el ends here
