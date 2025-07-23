@@ -1,4 +1,3 @@
-#+title: Bismuth
 #+author: Elam Day-Friedland
 
 Code reviews are important!
@@ -15,7 +14,6 @@ These 'review' events generally consist of
 
 These comments are created and within GitHub (not the repo itself),
 and are not associated with the repo's content outside of GitHub.
-
 When a reviewer leaves a comment on a line of code,
 it's associated with the most recent commit at the time of creation.
 
@@ -25,11 +23,13 @@ the comment is poisoned with an "outdated" flag and manual effort must be underg
 This is a direct result of comments being  only loosely coupled with the code changing under them.
 
 In summary,
-modern code reviews suffer from decoupling the review process from the code changes requested.
+*modern code reviews suffer from decoupling the review process from the code changes requested.*
 * Bismuth
-Bismuth is a collection of utilities (currently =inline-cr= and =brain=) attempting to alleviate these challenges.
+Bismuth is a collection of utilities (=inline-cr= and =brain=) attempting to alleviate these challenges.
+
 =inline-cr= makes it easy to have code review discussions truly in-line,
 allowing comment threads to be version controlled as part of the code itself.
+
 =brain= is a tool for reviewers,
 keeping track of diff hunks that have been reviewed (the 'brain'),
 so only new changes are presented when a re-review is requested.
@@ -44,7 +44,7 @@ their internal code review platform.
 
 ** [X]CR Syntax
 A code review is left by a "reviewer" to be addressed by an "author" using the syntax
-=> CR <reviewer> for <author>=, such as in the following example:
+=> CR <reviewer> for <author>=, such as in the following example (=elamdf= is the author):
 
 [[./img/actionable.png]]
 
@@ -112,3 +112,6 @@ Clone this repo, add =bismuth= to your =load-path=, and add
 #+END_SRC
 To your =init.el=!
 You can check out ~bismuth-example-config.el~ for some settings that you might want to use.
+
+* TODOs
+** TODO A nice github-like visual aggregator for all open (i.e. existing) comment threads
