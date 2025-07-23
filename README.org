@@ -1,21 +1,41 @@
-* Bismuth
-Bismuth is a collection of scripts to make brain-based, inline code reviews easy.
-It is heavily inspired by [[https://www.youtube.com/watch?v=MUqvXHEjmus][this]] talk from Jane Street about Iron,
-their internal code review platform.
+#+title: Bismuth
+#+author: Elam Day-Friedland
 
-* Code Reviews
-They're important!
-Especially for anything complex or collaborative
+Code reviews are important!
+How come they're so clunky?
 
-People usually do them on a platform like Github,
-where there are either
-- discrete 'review' events, which contain a set of comments that might be associated with a given line of a file at the latest commit at the time of review
-- individual comments associated with a line of a file at the latest commit when that comment was active
 
-This is fine if the code is never changed after it's reviewed.
+* How Code Reviews Happen Today
+People usually do code reviews on a platform like GitHub,
+where a reviewer performs discrete 'review' events on a feature branch.
+These 'review' events generally consist of
+- looking through the diff
+- leaving inline comments related to specific parts of the code
+- leaving general, overarching comments related to the entire PR
+
+These comments are created and within GitHub (not the repo itself),
+and are not associated with the repo's content outside of GitHub.
+
+When a reviewer leaves a comment on a line of code,
+it's associated with the most recent commit at the time of creation.
+
 Once the code is changed for a file,
 however,
 the comment is poisoned with an "outdated" flag and manual effort must be undergone to determine if it should be resolved or updated.
+This is a direct result of comments being  only loosely coupled with the code changing under them.
+
+In summary,
+modern code reviews suffer from decoupling the review process from the code changes requested.
+* Bismuth
+Bismuth is a collection of utilities (currently =inline-cr= and =brain=) attempting to alleviate these challenges.
+=inline-cr= makes it easy to have code review discussions truly in-line,
+allowing comment threads to be version controlled as part of the code itself.
+=brain= is a tool for reviewers,
+keeping track of diff hunks that have been reviewed (the 'brain'),
+so only new changes are presented when a re-review is requested.
+
+Bismuth is heavily inspired by [[https://www.youtube.com/watch?v=MUqvXHEjmus][this]] talk from Jane Street about Iron,
+their internal code review platform.
 
 * Inline Code Reviews
 - review comments are tracked in version control
