@@ -23,40 +23,29 @@ the comment is poisoned with an "outdated" flag and manual effort must be underg
 - code review comments are always 'up to date', since they're updated alongside the code
 
 ** [X]CR Syntax
-A code review is left by a "reviewer" to be addressed by an "author"
-#+BEGIN_SRC’
-code code code
-[comment symbol, such as # or //] > CR reviewer for author: pls add docstring
-> It would also be good to add some `assert`s to sanity check the input
-code code code
-#+END_SRC’
-"CR reviewer for author" makes this thread actionable for the author.
+A code review is left by a "reviewer" to be addressed by an "author" using the syntax
+=> CR <reviewer> for <author>=, such as in the following example:
+[[file:img/actionable.png][An actionable CR for the author]]
+">CR <reviewer> for <author>" makes this thread actionable for the author.
 An author can either delete the comment if they're confident it's been resolved,
-or reply
-#+BEGIN_SRC’
-code code code
-[comment symbol, such as # or //] > XCR reviewer for author: pls add docstring
-> It would also be good to add some `assert`s to sanity check the input
-> author: fixed. DWR if you're happy with the changes
-code code code
-#+END_SRC’
-Note the 'bit' flip from CR to XCR.
-This makes this thread actionable for the reviewer.
+or reply:
+[[file:img/author_response.png][An actionable CR for the reviewer]]
+Note the 'bit' flip from CR to XCR: this makes this thread actionable for the reviewer.
 DWR (delete when read) asks the reviewer to remove (resolve) the thread when they are satisfied.
 If the reviewer is not satisfied, they can flip the bit back
-#+BEGIN_SRC’
-code code code
-[comment symbol, such as # or //] > CR reviewer for author: pls add docstring
-> It would also be good to add some `assert`s to sanity check the input
-> author: fixed. DWR if you're happy with the changes
-> reviewer: pls fix the typo in the function name and DWR
-code code code
-#+END_SRC’
 and so on.
+[[file:img/reviewer_response.png][Flipping the bit back]]
+
+This conversation is tracked in the commit history,
+exactly the same as the code changed alongside it.
+
 
 ** How Bismuth Makes Code Reviews Easier
-For now, Bismuth provides some nice highlighting for actionable/nonactionable review threads,
-as well as keybindings and utility functions to navigate and aggregate said threads.
+For now, Bismuth
+- highlights actionable and non-actionable CR threads based on the author's username
+- provides keybindings for navigating CR threads
+- allows a user to aggregate actionable CR threads for a given file or project
+
 
 Here is the current default keymap.
 #+BEGIN_SRC
