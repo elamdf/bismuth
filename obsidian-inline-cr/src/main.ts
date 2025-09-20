@@ -32,16 +32,23 @@ export default class InlineCRPlugin extends Plugin {
   }
 
   private decorateBlockquote(blockquote: HTMLElement): void {
-    const paragraphs = blockquote.querySelectorAll("p");
+    const blockChildren = Array.from(blockquote.children).filter((child): child is HTMLElement =>
+      child instanceof HTMLElement && (child.tagName === "P" || child.tagName === "DIV")
+    );
 
-    paragraphs.forEach((paragraph) => {
-      this.decorateParagraph(paragraph as HTMLElement);
+    if (blockChildren.length === 0) {
+      this.decorateBlockElement(blockquote);
+      return;
+    }
+
+    blockChildren.forEach((child) => {
+      this.decorateBlockElement(child);
     });
   }
 
-  private decorateParagraph(paragraph: HTMLElement): void {
-    const nodes = Array.from(paragraph.childNodes);
-    const documentRef = paragraph.ownerDocument;
+  private decorateBlockElement(block: HTMLElement): void {
+    const nodes = Array.from(block.childNodes);
+    const documentRef = block.ownerDocument;
 
     if (!documentRef) {
       return;
@@ -61,16 +68,16 @@ export default class InlineCRPlugin extends Plugin {
 
     segments.push(current);
 
-    paragraph.textContent = "";
+    block.textContent = "";
 
     segments.forEach((segment, index) => {
       const decorated = this.decorateSegment(segment, documentRef);
       if (decorated) {
-        paragraph.appendChild(decorated);
+        block.appendChild(decorated);
       }
 
       if (index < segments.length - 1) {
-        paragraph.appendChild(documentRef.createElement("br"));
+        block.appendChild(documentRef.createElement("br"));
       }
     });
   }
