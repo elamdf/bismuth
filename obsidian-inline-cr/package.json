@@ -1,0 +1,19 @@
+{
+  "name": "obsidian-inline-cr",
+  "version": "0.1.0",
+  "description": "Highlight inline code review comments in Obsidian vaults.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "author": "Bismuth",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.8.2",
+    "esbuild": "^0.19.2",
+    "obsidian": "^1.5.7",
+    "tslib": "^2.6.2",
+    "typescript": "^5.2.2"
+  }
+}

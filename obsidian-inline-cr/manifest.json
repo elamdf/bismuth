@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-inline-cr",
+  "name": "Inline CR",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Highlight actionable inline code review comments.",
+  "author": "Bismuth",
+  "authorUrl": "https://github.com/elamdf/bismuth",
+  "isDesktopOnly": false
+}

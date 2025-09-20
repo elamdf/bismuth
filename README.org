@@ -30,6 +30,10 @@ Bismuth is a collection of utilities (=inline-cr= and =brain=) attempting to all
 =inline-cr= makes it easy to have code review discussions truly in-line,
 allowing comment threads to be version controlled as part of the code itself.
 
+There is also an experimental Obsidian plugin in ~obsidian-inline-cr/~ that
+highlights actionable inline review comments inside a vault based on the
+configured username.
+
 =brain= is a tool for reviewers,
 keeping track of diff hunks that have been reviewed (the 'brain'),
 so only new changes are presented when a re-review is requested.
