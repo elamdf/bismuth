@@ -33,7 +33,7 @@
 
 (defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
-  (format  "^\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*"))
+  (format  "^\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*\\(?:\n>\\s-*$\\)?"))
 (defun inline-cr-tk-regex ()
   "Regex to match the mentioned user in a TK or TODO comment."
   (format  "^\s*> \\(\\TK|TODO\\) \\([^ ]+\\):.*"))
@@ -81,7 +81,7 @@
   '((t (:foreground "black" :background "#F4B9D7")))
   "Face for actionable inline Scode review blocks.")
 
-; TODO use tk-regex as well, tk/todos should be actionables
+                                        ; TODO use tk-regex as well, tk/todos should be actionables
 (defun inline-cr--apply-actionable-overlay (start limit)
   "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
   (save-excursion
@@ -199,7 +199,7 @@
 
 
 (defun inline-cr-insert-review-comment ()
-      (goto-char (line-end-position))
+  (goto-char (line-end-position))
   (insert (format "\n> CR %s for " inline-cr-user))
 
   )
@@ -223,22 +223,22 @@
      ;; Case 1: On header → go to end of thread and decide whether to prefix user
      (thread-bounds
       (progn
-       ;; (save-excursion
-       (goto-char (car thread-bounds))
+        ;; (save-excursion
+        (goto-char (car thread-bounds))
         (forward-line 1)
         (while (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
-      (when (match-string 2)
-        (setq last-author (match-string 2)))
-      (forward-line 1))
-      (forward-line -1)
+          (when (match-string 2)
+            (setq last-author (match-string 2)))
+          (forward-line 1))
+        (forward-line -1)
 
 
-      (goto-char (line-end-position))
-      (insert (if (not (string= last-author user))
-                  (format "\n%s> %s: " prefix user)
-                (format "\n%s> " prefix)))
-      (goto-char (line-end-position))
-      ))
+        (goto-char (line-end-position))
+        (insert (if (not (string= last-author user))
+                    (format "\n%s> %s: " prefix user)
+                  (format "\n%s> " prefix)))
+        (goto-char (line-end-position))
+        ))
 
      ;; Case 3: Fallback
      (t
@@ -255,19 +255,19 @@
   "Toggle the CR/XCR tag at the start of the current review thread."
   (interactive)
   (if (or (inline-cr--at-thread-header-p) (inline-cr--at-thread-body-p))
-  (save-excursion
-    ;; Move upward until not a >-prefixed line, or we hit BOF
-    (while (and (not (bobp))
-                (save-excursion
-                  (forward-line -1)
-                  (looking-at (inline-cr-thread-regex))))
-      (forward-line -1))
-    (beginning-of-line)
-    (cond
-     ((looking-at "^\s*> CR ") (replace-match ( format "> XCR ")))
-     ((looking-at "^\s*> XCR ") (replace-match ( format "> CR ")))
-     ())
-  (inline-cr--refresh-display))))
+      (save-excursion
+        ;; Move upward until not a >-prefixed line, or we hit BOF
+        (while (and (not (bobp))
+                    (save-excursion
+                      (forward-line -1)
+                      (looking-at (inline-cr-thread-regex))))
+          (forward-line -1))
+        (beginning-of-line)
+        (cond
+         ((looking-at "^\s*> CR ") (replace-match ( format "> XCR ")))
+         ((looking-at "^\s*> XCR ") (replace-match ( format "> CR ")))
+         ())
+        (inline-cr--refresh-display))))
 
 
 ;;;###autoload
@@ -445,9 +445,14 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   (save-excursion
     (goto-char start)
     (while (re-search-forward (inline-cr-header-regex) end t)
-      (let* ((head-start (line-beginning-position))
+      (let* ((head-start (if (save-excursion
+                               (beginning-of-line)
+                               (looking-at "^>\\s-*$"))
+                             (save-excursion
+                               (forward-line -1)
+                               (line-beginning-position))
+                           (line-beginning-position)))
              (head-end (line-end-position))
-             ;; Check for actionable property on any character in the head
              (actionable (get-text-property head-start 'inline-cr-actionable))
              (face (if actionable
                        'inline-cr-actionable-block-face
@@ -455,7 +460,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
         ;; Highlight head line, but with a lower priority than the actionable highlight
         (let ((ov (make-overlay head-start head-end)))
           (overlay-put ov 'face face)
-            (overlay-put ov 'priority 1)
+          (overlay-put ov 'priority 1)
           (overlay-put ov 'inline-cr t))
         ;; Highlight thread body
         (forward-line 1)
@@ -463,7 +468,8 @@ If the head has `inline-cr-actionable` property, use the actionable face."
           (let ((ov (make-overlay (line-beginning-position) (line-end-position))))
             (overlay-put ov 'face face)
             (overlay-put ov 'inline-cr t))
-          (forward-line 1))))))
+          (forward-line 1))
+        ))))
 
 (defun inline-cr--refresh-display ()
   "Refresh visual display of inline CRs."
@@ -508,12 +514,12 @@ If the head has `inline-cr-actionable` property, use the actionable face."
         )
     (progn
       (jit-lock-unregister #'inline-cr--scan-for-actionables)
-        (remove-hook 'after-change-functions
-                     #'inline-cr--refresh-display-rest)
+      (remove-hook 'after-change-functions
+                   #'inline-cr--refresh-display-rest)
 
-        (inline-cr--cleanup)
-        )
-      ))
+      (inline-cr--cleanup)
+      )
+    ))
 
 
 ;; TODO make <cr expand to > CR $user for (fill out):
