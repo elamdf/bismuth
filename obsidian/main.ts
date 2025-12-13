@@ -1,7 +1,14 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice } from "obsidian";
-import { MarkdownView } from "obsidian";
-import type { EditorView } from "@codemirror/view";
-
+// NOTE: chatgpt wrote most of this using the emacs implementation as a reference
+import {
+  App,
+  Plugin,
+  PluginSettingTab,
+  Setting,
+  Notice,
+  MarkdownView,
+  TFile,
+  FuzzySuggestModal
+} from "obsidian";
 
 import {
   EditorView,
@@ -25,6 +32,15 @@ type ThreadInfo = {
   startLineNo: number; // header line
   endLineNo: number;   // inclusive
   actionable: boolean;
+};
+
+type ActionableHit = {
+  file: TFile;
+  lineNo: number;
+  lineText: string;
+  kind: "CR" | "XCR";
+  reviewer: string;
+  author: string;
 };
 
 function headerMatch(lineText: string): null | {
@@ -125,10 +141,8 @@ function lastAuthorInThread(view: EditorView, thread: ThreadInfo): string | null
 
 function buildDecorations(view: EditorView, user: string): DecorationSet {
   const builder = new RangeSetBuilder<Decoration>();
-  const doc = view.state.doc;
 
   const threads = scanThreads(view, user);
-
   const lineDeco = (cls: string) => Decoration.line({ class: cls });
 
   for (const t of threads) {
@@ -136,7 +150,7 @@ function buildDecorations(view: EditorView, user: string): DecorationSet {
     const headerClass = t.actionable ? "inline-cr-header-actionable" : "inline-cr-header-nonactionable";
 
     for (let ln = t.startLineNo; ln <= t.endLineNo; ln++) {
-      const line = doc.line(ln);
+      const line = view.state.doc.line(ln);
 
       // Whole thread block background
       builder.add(line.from, line.from, lineDeco(blockClass));
@@ -237,6 +251,143 @@ function insertReplyAtEndOfThread(view: EditorView, user: string): boolean {
   return true;
 }
 
+/* ---------------- Vault-wide aggregation ---------------- */
+
+function isActionableHeaderLine(
+  lineText: string,
+  user: string
+): null | { kind: "CR" | "XCR"; reviewer: string; author: string } {
+  const hm = headerMatch(lineText);
+  if (!hm) return null;
+  return computeActionable(hm, user) ? hm : null;
+}
+
+async function collectActionablesInVault(app: App, user: string): Promise<ActionableHit[]> {
+  if (!user) return [];
+
+  const files = app.vault.getMarkdownFiles();
+  const hits: ActionableHit[] = [];
+
+  for (const file of files) {
+    let text: string;
+    try {
+      text = await app.vault.read(file);
+    } catch {
+      continue;
+    }
+
+    let start = 0;
+    let lineNo = 1;
+
+    for (let i = 0; i <= text.length; i++) {
+      const isEol = i === text.length || text.charCodeAt(i) === 10; // '\n'
+      if (!isEol) continue;
+
+      const lineText = text.slice(start, i);
+      const hm = isActionableHeaderLine(lineText, user);
+      if (hm) {
+        hits.push({
+          file,
+          lineNo,
+          lineText,
+          kind: hm.kind,
+          reviewer: hm.reviewer,
+          author: hm.author
+        });
+      }
+
+      start = i + 1;
+      lineNo++;
+    }
+  }
+
+  hits.sort((a, b) => {
+    const ap = a.file.path.localeCompare(b.file.path);
+    return ap !== 0 ? ap : a.lineNo - b.lineNo;
+  });
+
+  return hits;
+}
+
+function formatActionablesNote(hits: ActionableHit[], user: string): string {
+  const out: string[] = [];
+  out.push(`# Inline CR actionables for \`${user}\``);
+  out.push("");
+  out.push(`Found **${hits.length}** actionable thread(s).`);
+  out.push("");
+
+  let curFile: string | null = null;
+  for (const h of hits) {
+    if (curFile !== h.file.path) {
+      curFile = h.file.path;
+      out.push(`## ${curFile}`);
+      out.push("");
+    }
+
+    // Note: Obsidian doesn't universally support line-jump links.
+    // We include the line number + a file link; the picker command can jump precisely.
+    out.push(`- **Line ${h.lineNo}** (${h.kind} ${h.reviewer} for ${h.author}): [[${h.file.path}]]`);
+    out.push(`  - \`${h.lineText.trim().replace(/`/g, "\\`")}\``);
+  }
+
+  out.push("");
+  return out.join("\n");
+}
+
+async function openHit(app: App, hit: ActionableHit) {
+  const leaf = app.workspace.getLeaf(false);
+  await leaf.openFile(hit.file);
+
+  const mdView = app.workspace.getActiveViewOfType(MarkdownView);
+  if (!mdView) return;
+
+  const editorAny: any = mdView.editor;
+  const ev: any =
+    (editorAny?.cm && typeof editorAny.cm === "object" && "state" in editorAny.cm && "dispatch" in editorAny.cm)
+      ? editorAny.cm
+      : editorAny?.cm?.cm;
+
+  if (!ev) return;
+
+  const needle = hit.lineText.trim();
+  const docText = ev.state.doc.toString();
+  const idx = docText.indexOf(needle);
+
+  if (idx >= 0) {
+    ev.dispatch({
+      selection: { anchor: idx },
+      scrollIntoView: true
+    });
+  } else {
+    // fallback: go to line number if possible
+    // (CM6 has line APIs, but we only have a raw idx fallback; keep it simple)
+  }
+}
+
+class ActionablePicker extends FuzzySuggestModal<ActionableHit> {
+  constructor(
+    app: App,
+    private hits: ActionableHit[],
+    private onPick: (hit: ActionableHit) => Promise<void>
+  ) {
+    super(app);
+  }
+
+  getItems(): ActionableHit[] {
+    return this.hits;
+  }
+
+  getItemText(hit: ActionableHit): string {
+    return `${hit.file.path}:${hit.lineNo}  ${hit.lineText.trim()}`;
+  }
+
+  async onChooseItem(hit: ActionableHit): Promise<void> {
+    await this.onPick(hit);
+  }
+}
+
+/* ---------------- Settings UI ---------------- */
+
 class InlineCrSettingTab extends PluginSettingTab {
   plugin: InlineCrPlugin;
 
@@ -282,34 +433,32 @@ export default class InlineCrPlugin extends Plugin {
     await this.loadSettings();
 
     this.addSettingTab(new InlineCrSettingTab(this.app, this));
-
     this.registerEditorExtension(makeInlineCrExtension(this.getUser, this.getVersion));
 
-const getEditorView = (): EditorView | null => {
-  const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
-  if (!mdView) return null;
+    const getEditorView = (): EditorView | null => {
+      const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (!mdView) return null;
 
-  // Obsidian’s CM6 EditorView is stashed on the editor object in a couple common places.
-  const editorAny: any = mdView.editor;
+      const editorAny: any = mdView.editor;
 
-  // Most common: editor.cm is the EditorView
-  const cm = editorAny?.cm;
-  if (cm && typeof cm === "object" && "state" in cm && "dispatch" in cm) return cm as EditorView;
+      const cm = editorAny?.cm;
+      if (cm && typeof cm === "object" && "state" in cm && "dispatch" in cm) return cm as EditorView;
 
-  // Sometimes: editor.cm.cm is the EditorView
-  const cm2 = editorAny?.cm?.cm;
-  if (cm2 && typeof cm2 === "object" && "state" in cm2 && "dispatch" in cm2) return cm2 as EditorView;
+      const cm2 = editorAny?.cm?.cm;
+      if (cm2 && typeof cm2 === "object" && "state" in cm2 && "dispatch" in cm2) return cm2 as EditorView;
 
-  return null;
-};
-
+      return null;
+    };
 
     this.addCommand({
       id: "inline-cr-next-actionable",
       name: "Next actionable CR/XCR",
       callback: () => {
         const ev = getEditorView();
-        if (!ev) return;
+        if (!ev) {
+          new Notice("Inline CR: no active markdown editor found.");
+          return;
+        }
         const ok = jumpToActionable(ev, this.settings.user, "next");
         if (!ok) new Notice(`No actionable CR/XCR for ${this.settings.user}`);
       }
@@ -320,26 +469,77 @@ const getEditorView = (): EditorView | null => {
       name: "Previous actionable CR/XCR",
       callback: () => {
         const ev = getEditorView();
-        if (!ev) return;
+        if (!ev) {
+          new Notice("Inline CR: no active markdown editor found.");
+          return;
+        }
         const ok = jumpToActionable(ev, this.settings.user, "prev");
         if (!ok) new Notice(`No actionable CR/XCR for ${this.settings.user}`);
       }
     });
 
-this.addCommand({
-  id: "inline-cr-insert-reply-at-end",
-  name: "Inline CR: Insert reply at end of thread",
-  callback: () => {
-    const ev = getEditorView();
-    if (!ev) {
-      new Notice("Inline CR: no active markdown editor found.");
-      return;
-    }
-    insertReplyAtEndOfThread(ev, this.settings.user);
-  }
-});
+    this.addCommand({
+      id: "inline-cr-insert-reply-at-end",
+      name: "Inline CR: Insert reply at end of thread",
+      callback: () => {
+        const ev = getEditorView();
+        if (!ev) {
+          new Notice("Inline CR: no active markdown editor found.");
+          return;
+        }
+        if (!this.settings.user) {
+          new Notice("Inline CR: set your User in settings first.");
+          return;
+        }
+        insertReplyAtEndOfThread(ev, this.settings.user);
+      }
+    });
 
+    this.addCommand({
+      id: "inline-cr-list-actionables-vault",
+      name: "Inline CR: List all actionables in vault",
+      callback: async () => {
+        if (!this.settings.user) {
+          new Notice("Inline CR: set your User in settings first.");
+          return;
+        }
 
+        const hits = await collectActionablesInVault(this.app, this.settings.user);
+
+        const reportPath = "Inline CR Actionables.md";
+        const reportText = formatActionablesNote(hits, this.settings.user);
+
+        const existing = this.app.vault.getAbstractFileByPath(reportPath);
+        let reportFile: TFile;
+
+        if (existing && existing instanceof TFile) {
+          reportFile = existing;
+          await this.app.vault.modify(reportFile, reportText);
+        } else {
+          reportFile = await this.app.vault.create(reportPath, reportText);
+        }
+
+        await this.app.workspace.getLeaf(false).openFile(reportFile);
+        new Notice(`Inline CR: wrote ${hits.length} actionable(s) to ${reportPath}`);
+      }
+    });
+
+    this.addCommand({
+      id: "inline-cr-pick-actionable",
+      name: "Inline CR: Pick an actionable (jump)",
+      callback: async () => {
+        if (!this.settings.user) {
+          new Notice("Inline CR: set your User in settings first.");
+          return;
+        }
+        const hits = await collectActionablesInVault(this.app, this.settings.user);
+        if (hits.length === 0) {
+          new Notice(`No actionable CR/XCR for ${this.settings.user}`);
+          return;
+        }
+        new ActionablePicker(this.app, hits, async (hit) => openHit(this.app, hit)).open();
+      }
+    });
   }
 
   onunload() {}
