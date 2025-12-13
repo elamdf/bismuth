@@ -400,7 +400,7 @@ class InlineCrSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Inline CR settings" });
+    containerEl.createEl("h2", { text: "Bismuth settings" });
 
     new Setting(containerEl)
       .setName("User")
@@ -452,11 +452,11 @@ export default class InlineCrPlugin extends Plugin {
 
     this.addCommand({
       id: "inline-cr-next-actionable",
-      name: "Next actionable CR/XCR",
+      name: "Next actionable CR/XCR in this file",
       callback: () => {
         const ev = getEditorView();
         if (!ev) {
-          new Notice("Inline CR: no active markdown editor found.");
+          new Notice("no active markdown editor found.");
           return;
         }
         const ok = jumpToActionable(ev, this.settings.user, "next");
@@ -466,11 +466,11 @@ export default class InlineCrPlugin extends Plugin {
 
     this.addCommand({
       id: "inline-cr-prev-actionable",
-      name: "Previous actionable CR/XCR",
+      name: "Previous actionable CR/XCR in this file",
       callback: () => {
         const ev = getEditorView();
         if (!ev) {
-          new Notice("Inline CR: no active markdown editor found.");
+          new Notice("no active markdown editor found.");
           return;
         }
         const ok = jumpToActionable(ev, this.settings.user, "prev");
@@ -480,15 +480,15 @@ export default class InlineCrPlugin extends Plugin {
 
     this.addCommand({
       id: "inline-cr-insert-reply-at-end",
-      name: "Inline CR: Insert reply at end of thread",
+      name: "Insert reply at end of thread",
       callback: () => {
         const ev = getEditorView();
         if (!ev) {
-          new Notice("Inline CR: no active markdown editor found.");
+          new Notice("no active markdown editor found.");
           return;
         }
         if (!this.settings.user) {
-          new Notice("Inline CR: set your User in settings first.");
+          new Notice("set your User in settings first.");
           return;
         }
         insertReplyAtEndOfThread(ev, this.settings.user);
@@ -497,16 +497,16 @@ export default class InlineCrPlugin extends Plugin {
 
     this.addCommand({
       id: "inline-cr-list-actionables-vault",
-      name: "Inline CR: List all actionables in vault",
+      name: "List all actionables in vault",
       callback: async () => {
         if (!this.settings.user) {
-          new Notice("Inline CR: set your User in settings first.");
+          new Notice("set your User in settings first.");
           return;
         }
 
         const hits = await collectActionablesInVault(this.app, this.settings.user);
 
-        const reportPath = "Inline CR Actionables.md";
+        const reportPath = "Actionables.md";
         const reportText = formatActionablesNote(hits, this.settings.user);
 
         const existing = this.app.vault.getAbstractFileByPath(reportPath);
@@ -520,16 +520,16 @@ export default class InlineCrPlugin extends Plugin {
         }
 
         await this.app.workspace.getLeaf(false).openFile(reportFile);
-        new Notice(`Inline CR: wrote ${hits.length} actionable(s) to ${reportPath}`);
+        new Notice(`wrote ${hits.length} actionable(s) to ${reportPath}`);
       }
     });
 
     this.addCommand({
       id: "inline-cr-pick-actionable",
-      name: "Inline CR: Pick an actionable (jump)",
+      name: "Pick an actionable (jump)",
       callback: async () => {
         if (!this.settings.user) {
-          new Notice("Inline CR: set your User in settings first.");
+          new Notice("set your User in settings first.");
           return;
         }
         const hits = await collectActionablesInVault(this.app, this.settings.user);
