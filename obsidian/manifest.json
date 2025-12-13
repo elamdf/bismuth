@@ -1,0 +1,10 @@
+{
+	"id": "bismuth",
+	"name": "Bismuth",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "An Obsidian plugin for the Bismuth code review platform.",
+	"author": "Elam Day-Friedland",
+	"authorUrl": "https://github.com/elamdf/bismuth",
+	"isDesktopOnly": false
+}

@@ -1,0 +1,41 @@
+/*
+
+This CSS file will be included with your plugin, and
+available in the app when your plugin is enabled.
+
+If your plugin does not need CSS, delete this file.
+
+
+/* Thread block background */
+.cm-line.inline-cr-block {
+  background: rgba(120, 160, 120, 0.18);
+}
+
+.cm-line.inline-cr-block-actionable {
+  background: rgba(220, 120, 170, 0.22);
+}
+
+/* Header line text emphasis */
+.cm-line.inline-cr-header {
+  font-weight: 600;
+}
+
+.cm-line.inline-cr-header-actionable {
+  color: #000;
+  font-weight: 800;
+}
+
+.cm-line.inline-cr-header-nonactionable {
+  color: rgba(120, 120, 120, 0.95);
+  font-weight: 600;
+}
+
+/* Optional: subtle left bar to make threads pop */
+.cm-line.inline-cr-block,
+.cm-line.inline-cr-block-actionable {
+  box-shadow: inset 3px 0 0 rgba(0, 0, 0, 0.12);
+}
+
+.cm-line.inline-cr-block-actionable {
+  box-shadow: inset 3px 0 0 rgba(220, 120, 170, 0.6);
+}
