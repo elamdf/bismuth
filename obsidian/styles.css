@@ -11,14 +11,20 @@ If your plugin does not need CSS, delete this file.
   color: #000;
   font-weight: 800;
   background: #F4B9D7 !important;
+}
 
-
+.cm-line.inline-cr-block-actionable {
+  color: #000;
+  background: #F4B9D7 !important;
 }
 
 .cm-line.inline-cr-header-nonactionable {
   color: #000;
   font-weight: 500;
   background: #D9FFE2 !important;
+}
 
-
+.cm-line.inline-cr-block {
+  color: #000;
+   background: #D9FFE2 !important;
 }
