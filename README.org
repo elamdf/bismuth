@@ -129,9 +129,10 @@ so actionable threads can be correctly identified!
 some features that would be nice
 - jump directly to actionable point (not just file) from aggregate note
 - see actionables created by recent git commits
+- more native window for aggregation with click-to-follow link, the discrete note is a bit clunky
+
 
 * TODOs
 ** TODO A nice github-like visual aggregator for all open (i.e. existing) comment threads
 ** generic parser binary
-.. probably in a faster langauge, so as to support other frontends than emacs
-** obsidian plugin
+.. probably in a faster langauge, so as to support other frontends than emac
