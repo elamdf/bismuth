@@ -50,7 +50,7 @@ function headerMatch(lineText: string): null | {
 } {
   // > CR reviewer for author: ...
   // > XCR reviewer for author: ...
-  const m = lineText.match(/^\s*>\s*(X?CR)\s+(\S+)\s+for\s+([^:]+)\s*:/);
+  const m = lineText.match(/^\s*>\s+(X?CR)\s+(\S+)\s+for\s+([^:]+)\s*:/);
   if (!m) return null;
   const kind = (m[1] === "XCR" ? "XCR" : "CR") as "CR" | "XCR";
   return { kind, reviewer: m[2], author: m[3].trim() };
