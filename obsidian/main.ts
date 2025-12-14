@@ -275,6 +275,9 @@ async function collectActionablesInVault(app: App, user: string): Promise<Action
     } catch {
       continue;
     }
+    if (file.name == "Actionables.md") {
+    continue;
+    }
 
     let start = 0;
     let lineNo = 1;
@@ -327,7 +330,7 @@ function formatActionablesNote(hits: ActionableHit[], user: string): string {
     // Note: Obsidian doesn't universally support line-jump links.
     // We include the line number + a file link; the picker command can jump precisely.
     out.push(`- **Line ${h.lineNo}** (${h.kind} ${h.reviewer} for ${h.author}): [[${h.file.path}]]`);
-    out.push(`  - \`${h.lineText.trim().replace(/`/g, "\\`")}\``);
+    out.push(`${h.lineText.trim().replace(/`/g, "\\`")}`);
   }
 
   out.push("");
