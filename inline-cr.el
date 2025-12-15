@@ -26,6 +26,7 @@
 ;;; Code:
 
 (require 'tabulated-list)
+(require 'outline)
 (require 'projectile)
 (require 'cl-lib)
 (require 'subr-x)
@@ -186,7 +187,7 @@
   (interactive)
   (inline-cr--goto-actionable 'prev))
 
-(defun inline-cr--at-thread-header-p ()
+(defun inline-cr--at-thread-header-p  ()
   "Return t if point is on a CR or XCR header line."
   (save-excursion
     (beginning-of-line)
@@ -263,6 +264,15 @@
          ())
         (inline-cr--refresh-display))))
 
+
+(defun inline-cr--back-to-header ()
+  (goto-char (car  (inline-cr--thread-boundaries))))
+
+(defun inline-cr--end-of-header ()
+  (progn (inline-cr--back-to-header) (end-of-line)))
+
+(defun inline-cr--end-of-thread ()
+  (goto-char (cdr (inline-cr--thread-boundaries))))
 
 (defun inline-cr--thread-boundaries ()
   "Return (START . END) of current CR/XCR thread, or nil."
@@ -417,6 +427,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     (define-key map (kbd "C-c RET") #'inline-cr-maybe-toggle-cr-xcr)
     (define-key map (kbd "RET") #'inline-cr-maybe-extend-thread)
     (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
+    (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
+    (define-key map (kbd "<TAB>") #' inline-cr-maybe-toggle-children)
+
 
     map)
   "Keymap for inline-cr-mode.")
@@ -448,6 +461,44 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 
 ;; TODO make <cr expand to > CR $user for (fill out):
 ;; todo make <td expand to >CR $user for $user:
+;; asd
+;; asd
+
+;; we want a top of thread, end of heading, and end of thread functions
+(defun inline-cr--hide-thread ()
+  "Hide a thread, foldering after the header line"
+  (outline-flag-region
+   (progn (inline-cr--end-of-header) (point))
+   (progn (inline-cr--end-of-thread) (point))
+   t
+   )
+  )
+(defun inline-cr--show-thread ()
+  "Hide a thread, foldering after the header line"
+  (outline-flag-region
+   (progn (inline-cr--end-of-header) (point))
+   (progn (inline-cr--end-of-thread) (point))
+   nil
+   )
+  )
+
+(defun inline-cr--toggle-children ()
+  "Show or hide the current subtree depending on its current state."
+  (interactive)
+  (save-excursion
+    (inline-cr--back-to-header)
+    (if (not (outline-invisible-p (pos-eol)))
+        (inline-cr--hide-thread)
+      (inline-cr--show-thread)
+      )))
+(defun inline-cr-maybe-toggle-children ()
+  (interactive)
+  (if (inline-cr--at-thread-header-p)
+      (inline-cr--toggle-children)
+    (indent-for-tab-command)
+  ));; TODO do
+;; (outline-flag-region start_point end_point val) val = t for folded and nil for unfolded
+
 (provide 'inline-cr)
 
 ;;; inline-cr.el ends here
