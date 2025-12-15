@@ -1,7 +1,5 @@
-// main.ts
-// Inline CR/XCR: highlight threads in-editor + vault-wide actionable navigator (sidebar view + picker)
-// Desktop: can optionally use external `crscan` binary (faster / single source of truth)
-// Mobile: falls back to in-TS vault scan
+// NOTE: chatgpt wrote most of this using the emacs implementation as a reference
+
 
 import {
   App,
@@ -807,5 +805,3 @@ export default class InlineCrPlugin extends Plugin {
     }));
   }
 }
-
-// NOTE: chatgpt wrote most of this using the emacs implementation as a reference
