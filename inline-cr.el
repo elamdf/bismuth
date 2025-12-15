@@ -259,8 +259,8 @@
           (forward-line -1))
         (beginning-of-line)
         (cond
-         ((looking-at "^\s*> CR ") (replace-match ( format "> XCR ")))
-         ((looking-at "^\s*> XCR ") (replace-match ( format "> CR ")))
+         ((looking-at "^\s*> CR ") (replace-match ( format "> XCR ") t t))
+         ((looking-at "^\s*> XCR ") (replace-match ( format "> CR ") t t))
          ())
         (inline-cr--refresh-display))))
 
