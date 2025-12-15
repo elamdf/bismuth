@@ -83,6 +83,14 @@ Here is the current default keymap.
 #+END_SRC
 See the source in ~inline-cr.el~ for more information.
 
+* Magit Integration
+You can =(require 'bismuth-magit)= and add =(add-hook 'magit-status-headers-hook #'bismuth-magit-insert-actionables t)= to your =init.el= to create a section in the =magit-status= buffer listing actionable CRs for a repo.
+[[./img/magit.png]]
+
+Note that this functionality relies on the parser binary =crscan= that can be build by running =cargo build --release= in =parser/=.
+The path is hardcoded for now.
+> CR elamdf for elamdf: fix the hardcoded parser binary path
+
 * Brains for Inline Code Review
 Each reviewer for a given PR attempting to merge `feature` into `target` ideally has a has a 'review brain' for that PR.
 

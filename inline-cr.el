@@ -26,6 +26,10 @@
 ;;; Code:
 
 (require 'tabulated-list)
+(require 'projectile)
+(require 'cl-lib)
+(require 'subr-x)
+(require 'magit-section)
 
 (defgroup inline-cr nil
   "Inline code review utilities."
@@ -120,8 +124,6 @@
 
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
-
-
   (save-excursion
     (goto-char start)
 
@@ -220,7 +222,6 @@
         )
 
     (cond
-     ;; Case 1: On header → go to end of thread and decide whether to prefix user
      (thread-bounds
       (progn
         ;; (save-excursion
@@ -240,15 +241,8 @@
         (goto-char (line-end-position))
         ))
 
-     ;; Case 3: Fallback
      (t
       (call-interactively #'newline)))))
-
-
-
-
-
-
 
 
 (defun inline-cr-maybe-toggle-cr-xcr ()
@@ -269,42 +263,6 @@
          ())
         (inline-cr--refresh-display))))
 
-
-;;;###autoload
-;; TODO replace with (defun inline-cr-list-all-file-mentions () that uses inline--cr-mention-mode
-(defun inline-cr-find-cr-mentions ()
-  "Open a buffer with clickable links to CR/XCR comments involving you."
-  (interactive)
-  (let* ((user (regexp-quote inline-cr-user))
-         (patterns (list (concat "^.*> CR .* for " user ":")
-                         (concat "^.*> XCR " user " for .*:")))
-         (source-buf (current-buffer))
-         (report-buf (get-buffer-create  (format "*%s CR Actionables*" (buffer-name source-buf)))))
-    (with-current-buffer report-buf
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        ;; (insert (format "Actionables for %s in: %s\n\n" inline-cr-user (buffer-name source-buf)))
-        (with-current-buffer source-buf
-          (save-excursion
-            (goto-char (point-min))
-            (dolist (pat patterns)
-              (goto-char (point-min))
-              (while (re-search-forward pat nil t)
-                (let ((line (buffer-substring-no-properties
-                             (line-beginning-position) (line-end-position)))
-                      (lineno (line-number-at-pos))
-                      (pos (point)))
-                  (with-current-buffer report-buf
-                    (insert-button
-                     (format "Line %d: %s\n" lineno line)
-                     'action (lambda (_)
-                               (pop-to-buffer source-buf)
-                               (goto-char pos)
-                               (recenter))
-                     'follow-link t))))))))
-      (goto-char (point-min))
-      (read-only-mode 1))
-    (pop-to-buffer report-buf)))
 
 (defun inline-cr--thread-boundaries ()
   "Return (START . END) of current CR/XCR thread, or nil."
@@ -327,41 +285,6 @@
         (setq end (point))
         (cons start end)))))
 
-
-
-(defvar inline-cr--mention-buffer "*Inline CR Mentions*")
-
-(defun inline-cr--collect-cr-mentions ()
-  "Return a list of (FILE LINE-NUM TEXT) for actionable CR/XCR threads in .org and .md files."
-  (unless (projectile-project-p)
-    (error "Not in a projectile project"))
-  (let* ((root (projectile-project-root))
-         (files (cl-remove-if-not
-                 (lambda (f)
-                   (string-match-p "\\.\\(org\\|md\\)\\'" f))
-                 (projectile-current-project-files)))
-         (results '()))
-    (dolist (file files)
-      (let ((full-path (expand-file-name file root)))
-        (when (file-readable-p full-path)
-          (with-temp-buffer
-            (message "inline-cr: checking %s as user %s" full-path inline-cr-user)
-
-            (insert-file-contents full-path)
-            (delay-mode-hooks (normal-mode t))
-            ;; Annotate actionables
-            (inline-cr--scan-for-actionables (point-min) (point-max))
-            ;; Scan for actionable lines
-            (goto-char (point-min))
-            (let ((line-num 1))
-              (while (not (eobp))
-                (when (get-text-property (point) 'inline-cr-actionable)
-                  (let ((line (buffer-substring-no-properties
-                               (line-beginning-position) (line-end-position))))
-                    (push (list full-path line-num line) results)))
-                (forward-line 1)
-                (cl-incf line-num)))))))
-    (nreverse results)))
 
 (defun inline-cr--agenda-source ()
   "Generate Org agenda items for actionable inline CR/XCRs."
@@ -489,7 +412,8 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     (define-key map (kbd "M-n") #'inline-cr-next-actionable)
     (define-key map (kbd "M-p") #'inline-cr-prev-actionable)
     (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
-    (define-key map (kbd "C-c T") #'inline-cr-list-all-project-mentions)
+    (define-key map (kbd "C-c T") #'inline-cr-find-project-cr-mentions)
+
     (define-key map (kbd "C-c RET") #'inline-cr-maybe-toggle-cr-xcr)
     (define-key map (kbd "RET") #'inline-cr-maybe-extend-thread)
     (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
