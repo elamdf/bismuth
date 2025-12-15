@@ -128,19 +128,11 @@ Basic support for things like highlighting and aggregating actionable CRs are su
 To install it, you'll need to =cd obsidian; npm install; npm run= and copy or symlink that =obsidian= folder into =.obsidian/plugins/bismuth= in your vault.
 If you have community plugins enabled already, you should see bismuth as an installed plugin that you can enable.
 
-All navigation/aggregation functionality is implemented via commands (you can see what's available by doing Ctrl-p and typing "bismuth").
-You can bind these commands to keys using Obsidian's hotkeys [[https://help.obsidian.md/hotkeys][support]].
+There are a couple commands to help with navigating through actionable CRs in a file. You can see what's available by doing Ctrl-p and typing "bismuth" and bind these commands to keys using Obsidian's hotkeys [[https://help.obsidian.md/hotkeys][support]].
+The plugin creates a little check box icon in the left sidebar that you can click to aggregate all actionable CRs for a vault.
 
 Make sure to set your desired username in the settings menu,
 so actionable threads can be correctly identified!
 
 some features that would be nice
-- jump directly to actionable point (not just file) from aggregate note
 - see actionables created by recent git commits
-- more native window for aggregation with click-to-follow link, the discrete note is a bit clunky
-
-
-* TODOs
-** TODO A nice github-like visual aggregator for all open (i.e. existing) comment threads
-** generic parser binary
-.. probably in a faster langauge, so as to support other frontends than emac
