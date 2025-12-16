@@ -52,21 +52,6 @@
   :type 'string
   :group 'inline-cr)
 
-(defface inline-cr-author-face
-  '((t :foreground "#fabd2f" :weight bold))
-  "Face for CRs where author (you) must respond."
-  :group 'inline-cr)
-
-(defface inline-cr-reviewer-face
-  '((t :foreground "#d3869b" :weight bold))
-  "Face for XCRs where reviewer (you) must respond."
-  :group 'inline-cr)
-
-(defface inline-cr-reply-face
-  '((t :foreground "#83a598" :slant italic))
-  "Face for reply lines."
-  :group 'inline-cr)
-
 (defface inline-cr-actionable-face
   '((t :weight bold :foreground "black"))
   "Face for actionable CR/XCR lines.")
@@ -120,7 +105,7 @@
 
 
 (defun inline-cr--goto-actionable (direction)
-  "Move to next/previous actionable CR/XCR comment for `inline-cr-user`, wrapping if needed."
+  "Move to next/previous (based on DIRECTION) actionable CR/XCR comment for `inline-cr-user`, wrapping if needed."
   (let* ((step (if (eq direction 'next) 1 -1))
          (search-fn
           (if (eq direction 'next) #'re-search-forward
@@ -224,7 +209,7 @@
 
 
 (defun inline-cr-maybe-toggle-active ()
-  "Toggle the N prefix at the start of the current review thread if we're in a thread, otherwise comment-dwim."
+  "Toggle the N prefix at the start of the current review thread if we're in a thread, otherwise 'comment-dwim'."
   (interactive)
   (if
       (or (inline-cr--at-thread-header-p)
@@ -271,7 +256,7 @@
 
 
 (defun inline-cr--back-to-header ()
-  (goto-char (car  (inline-cr--thread-boundaries))))
+  (goto-char (car (inline-cr--thread-boundaries))))
 
 (defun inline-cr--end-of-header ()
   (progn (inline-cr--back-to-header) (end-of-line)))
@@ -301,26 +286,6 @@
         (cons start end)))))
 
 
-(defun inline-cr--agenda-source ()
-  "Generate Org agenda items for actionable inline CR/XCRs."
-  (let ((items '()))
-    (dolist (entry (inline-cr--collect-cr-mentions))
-      (let* ((file (car entry))
-             (line (cadr entry))
-             (text (cl-caddr entry))
-             (marker (with-current-buffer (find-file-noselect file)
-                       (save-excursion
-                         (goto-char (point-min))
-                         (forward-line (1- line))
-                         (point-marker))))
-             (heading (format "[inline-cr] %s:%d %s"
-                              (file-name-nondirectory file) line text)))
-        (push (list heading marker nil) items)))
-    (nreverse items)))
-
-
-
-
 ;; TODO (elamdf) this should do markdown formatting even in non-markdown files
 (defun inline-cr--highlight-thread (start end)
   "Apply background face to CR/XCR thread from START to END.
@@ -343,7 +308,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
              (block (if active (if actionable
                                    'inline-cr-actionable-block-face
                                  'inline-cr-block-face)
-                       'inline-cr-inactive-block-face))
+                      'inline-cr-inactive-block-face))
              (header (if actionable
                          'inline-cr-actionable-face
                        'inline-cr-nonactionable-face))
@@ -428,8 +393,6 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 
 ;; TODO make <cr expand to > CR $user for (fill out):
 ;; todo make <td expand to >CR $user for $user:
-;; asd
-;; asd
 
 ;; we want a top of thread, end of heading, and end of thread functions
 (defun inline-cr--hide-thread ()
@@ -440,6 +403,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
    t
    )
   )
+
 (defun inline-cr--show-thread ()
   "Hide a thread, foldering after the header line"
   (outline-flag-region
@@ -449,22 +413,20 @@ If the head has `inline-cr-actionable` property, use the actionable face."
    )
   )
 
-(defun inline-cr--toggle-children ()
-  "Show or hide the current subtree depending on its current state."
-  (interactive)
-  (save-excursion
-    (inline-cr--back-to-header)
-    (if (not (outline-invisible-p (pos-eol)))
-        (inline-cr--hide-thread)
-      (inline-cr--show-thread)
-      )))
+
 (defun inline-cr-maybe-toggle-children ()
+  "Show or hide the current thread depending on its current state, if we are in one."
   (interactive)
   (if (inline-cr--at-thread-header-p)
-      (inline-cr--toggle-children)
-    (call-interactively (local-key-binding (kbd "TAB")))
-    ))
+      (save-excursion
+         (inline-cr--back-to-header)
+         (if (not (outline-invisible-p (pos-eol)))
+             (inline-cr--hide-thread)
+           (inline-cr--show-thread)
+           ))
+       (call-interactively (local-key-binding (kbd "TAB")))
+       ))
 
-(provide 'inline-cr)
+  (provide 'inline-cr)
 
 ;;; inline-cr.el ends here
