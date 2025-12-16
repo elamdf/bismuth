@@ -39,10 +39,7 @@
 (defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
   (format
-   "^\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*\\(?:\n>\\s-*$\\)?"))
-(defun inline-cr-tk-regex ()
-  "Regex to match the mentioned user in a TK or TODO comment."
-  (format  "^\s*> \\(\\TK|TODO\\) \\([^ ]+\\):.*"))
+   "^\s*> \\(\\(N\\)?\\(X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*\\(?:\n>\\s-*$\\)?"))
 (defun inline-cr-thread-regex ()
   "Regex to match non-header lines of an inline CR, optionally capturing an author name."
   (format "^\s*>\s*\\(\\(\\S-*\\):\\)?.*"))
@@ -78,6 +75,9 @@
   '((t :foreground "gray50"))
   "Face for non-actionable CR/XCR lines.")
 
+(defface inline-cr-inactive-block-face
+  '((t (:foreground "black" :background "#E3E3E3")))
+  "Face for inactive (N-prefixed) inline code review blocks.")
 
 (defface inline-cr-block-face
   '((t (:foreground "black" :background "#D9FFE2")))
@@ -85,45 +85,12 @@
 
 (defface inline-cr-actionable-block-face
   '((t (:foreground "black" :background "#F4B9D7")))
-  "Face for actionable inline Scode review blocks.")
 
-                                        ; TODO use tk-regex as well, tk/todos should be actionables
-(defun inline-cr--apply-actionable-overlay (start limit)
-  "Search for CR/XCR lines up to LIMIT, and apply face based on `inline-cr-actionable` property."
-  (save-excursion
-    (goto-char (point-min))
-    (while (re-search-forward (inline-cr-header-regex) nil t)
-      (let ((start (match-beginning 0))
-            (end (match-end 0)))
-        (when (get-text-property start 'inline-cr-actionable)
-          (let ((ov (make-overlay start end)))
-            (overlay-put ov 'face 'inline-cr-actionable-face)
-            (overlay-put ov 'priority 2)  ;; Higher priority than text color
-            (overlay-put ov 'inline-cr t)))
-        (unless (get-text-property start 'inline-cr-actionable)
-          (let ((ov (make-overlay start end)))
-            (overlay-put ov 'face 'inline-cr-nonactionable-face)
-            (overlay-put ov 'inline-cr t))))
-      t)))
+  "Face for actionable inline code review blocks.")
 
 
-
-(defun inline-cr--virtual-org-buffer ()
-  "Return a buffer with actionable CRs as TODO entries."
-  (let ((buf (get-buffer-create "*inline-cr-org-agenda*")))
-    (with-current-buffer buf
-      (erase-buffer)
-      (org-mode)
-      (let ((mentions (inline-cr--collect-cr-mentions)))
-        (dolist (entry mentions)
-          (let* ((file (file-name-nondirectory (car entry)))
-                 (line (cadr entry))
-                 (text (string-trim (caddr entry)))
-                 (link (format "[[file:%s::%d]]" file line)))
-            (insert (format "* TODO %s\n  %s\n\n" text link)))))
-      buf)))
-
-
+;; > CR elamdf for elamdf: fix inline crs for non-markdown source files (i.e. allow comment prefix for > CR
+;; cont
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
   (save-excursion
@@ -133,17 +100,22 @@
 
       (while (re-search-forward (inline-cr-header-regex) nil t)
         (let* ((kind (match-string 1)) ;; "CR" or "XCR"
-               (who (match-string 3))
-               (whom (match-string 4))
+               (who (match-string 4))
+               (whom (match-string 5))
                (beg (match-beginning 0))
                (end (match-end 0)))
-          (if (or
-               (and (string= kind "CR")
-                    (string= whom inline-cr-user))
-               (and (string= kind "XCR")
-                    (string= who inline-cr-user)))
-              (put-text-property beg end 'inline-cr-actionable t)
-            (put-text-property beg end 'inline-cr-actionable nil)))))))
+          (progn (if (or
+                      (and (string= kind "CR")
+                           (string= whom inline-cr-user))
+                      (and (string= kind "XCR")
+                           (string= who inline-cr-user)))
+                     ( put-text-property beg end 'inline-cr-actionable t)
+                   (put-text-property beg end 'inline-cr-actionable nil)
+                   )
+                 (if (not (or (string= kind "NXCR") (string= kind "NCR")))
+                     (put-text-property beg end 'inline-cr-active t)
+                   (put-text-property beg end 'inline-cr-active nil)))
+          )))))
 
 
 
@@ -324,67 +296,6 @@
 
 
 
-(defun inline-cr--mention-mode ()
-  "Major mode for displaying inline CR mentions."
-  (kill-all-local-variables)
-  (setq major-mode 'inline-cr--mention-mode)
-  (setq mode-name "Inline CR Mentions")
-  (use-local-map tabulated-list-mode-map)
-  (setq tabulated-list-format [("File" 40 t)
-                               ("Line" 6 t)
-                               ("Text" 0 nil)])
-  (setq tabulated-list-padding 2)
-  (setq tabulated-list-entries
-        (mapcar (lambda (entry)
-                  (let ((file (file-name-nondirectory (car entry)))
-                        (line (cadr entry))
-                        (text (cl-caddr entry)))
-                    ;; Store file and line in the entry ID for lookup
-                    (list (cons file line)
-                          (vector
-                           (file-relative-name file
-                                               (projectile-project-root))
-                           (number-to-string line)
-                           text))))
-                (inline-cr--collect-cr-mentions)))
-  (setq tabulated-list-sort-key (cons "File" nil))
-  (add-hook 'tabulated-list-revert-hook
-            #'inline-cr-list-all-project-mentions nil t)
-
-  ;; Add RET handler
-  (define-key tabulated-list-mode-map (kbd "RET")
-              #'inline-cr--visit-entry)
-
-  (tabulated-list-init-header)
-  (tabulated-list-print))
-
-(defun inline-cr--visit-entry ()
-  "Visit the file and line at point in the CR/XCR list."
-  (interactive)
-  (let* ((id (tabulated-list-get-id)) ;; ID is a (file . line) pair
-         (file (car id))
-         (line (cdr id)))
-    (find-file file)
-    (goto-char (point-min))
-    (forward-line (1- line))))
-
-
-(defun inline-cr-list-all-project-mentions ()
-  "Display a list of all CR/XCR mentions in a project in a clickable buffer."
-  (interactive)
-  (let
-      ((buf
-        (get-buffer-create
-         (format "* %s CR Actionables*" (projectile-project-name)))))
-    (with-current-buffer buf
-      (inline-cr--mention-mode))
-    (pop-to-buffer buf)))
-
-
-
-
-
-
 
 ;; TODO (elamdf) this should do markdown formatting even in non-markdown files
 (defun inline-cr--highlight-thread (start end)
@@ -403,13 +314,27 @@ If the head has `inline-cr-actionable` property, use the actionable face."
              (head-end (line-end-position))
              (actionable
               (get-text-property head-start 'inline-cr-actionable))
-             (face (if actionable
-                       'inline-cr-actionable-block-face
-                     'inline-cr-block-face)))
+             (active
+              (get-text-property head-start 'inline-cr-active))
+             (block (if active (if actionable
+                                   'inline-cr-actionable-block-face
+                                 'inline-cr-block-face)
+                       'inline-cr-inactive-block-face))
+             (header (if actionable
+                         'inline-cr-actionable-face
+                       'inline-cr-nonactionable-face))
+             )
         ;; Highlight head line, but with a lower priority than the actionable highlight
         (let ((ov (make-overlay head-start head-end)))
-          (overlay-put ov 'face face)
+          (overlay-put ov 'face header)
           (overlay-put ov 'priority 1)
+          (overlay-put ov 'inline-cr t))
+        ;; for some reason if we try to fold this into the highlight thread body code, it doesn't work
+        ;; > CR elamdf for elamdf: dedup this code section
+
+        (let ((ov (make-overlay head-start head-end)))
+          (overlay-put ov 'face block)
+          (overlay-put ov 'priority 2)
           (overlay-put ov 'inline-cr t))
         ;; Highlight thread body
         (forward-line 1)
@@ -418,7 +343,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
               ((ov
                 (make-overlay (line-beginning-position)
                               (line-end-position))))
-            (overlay-put ov 'face face)
+            (overlay-put ov 'face block)
+            (overlay-put ov 'priority 2)
+
             (overlay-put ov 'inline-cr t))
           (forward-line 1))
         ))))
@@ -428,7 +355,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   ;; TODO this may be overkill, but I don't really understand how the jit stuff works
   (inline-cr--scan-for-actionables (point-min) (point-max))
   (remove-overlays (point-min) (point-max) 'inline-cr t)
-  (inline-cr--apply-actionable-overlay (point-min) (point-max))
+  ;; (inline-cr--apply-actionable-overlay (point-min) (point-max))
   (inline-cr--highlight-thread (point-min) (point-max)))
 
 (defun inline-cr--cleanup ()
@@ -515,7 +442,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   (if (inline-cr--at-thread-header-p)
       (inline-cr--toggle-children)
     (call-interactively (local-key-binding (kbd "TAB")))
-  ))
+    ))
 
 (provide 'inline-cr)
 

@@ -64,6 +64,8 @@ and so on.
 This conversation is tracked in the commit history,
 exactly the same as the code changed alongside it.
 
+The N prefix to CR or XCR marks a thread inactive,
+removing it from the actionable list of both author and reviewer without deleting the text.
 
 ** How Bismuth Makes Code Reviews Easier
 For now, Bismuth
