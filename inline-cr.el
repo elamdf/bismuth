@@ -90,7 +90,7 @@
 
 
 ;; > CR elamdf for elamdf: fix inline crs for non-markdown source files (i.e. allow comment prefix for > CR
-;; cont
+
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
   (save-excursion
@@ -221,6 +221,30 @@
 
      (t
       (call-interactively #'newline)))))
+
+
+(defun inline-cr-maybe-toggle-active ()
+  "Toggle the N prefix at the start of the current review thread if we're in a thread, otherwise comment-dwim."
+  (interactive)
+  (if
+      (or (inline-cr--at-thread-header-p)
+          (inline-cr--at-thread-body-p))
+      (save-excursion
+        ;; Move upward until not a >-prefixed line, or we hit BOF
+        (while (and (not (bobp))
+                    (save-excursion
+                      (forward-line -1)
+                      (looking-at (inline-cr-thread-regex))))
+          (forward-line -1))
+        (beginning-of-line)
+        (cond
+         ((looking-at "^\s*> N")
+          (replace-match ( format "> ") t t))
+         ((looking-at "^\s*> ")
+          (replace-match ( format "> N") t t))
+         ())
+        (inline-cr--refresh-display))
+    (call-interactively 'comment-dwim))) ;; this is hardcoded, assumes we're globally overwriting M-; with this
 
 
 (defun inline-cr-maybe-toggle-cr-xcr ()
@@ -367,9 +391,6 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "M-n") #'inline-cr-next-actionable)
     (define-key map (kbd "M-p") #'inline-cr-prev-actionable)
-    (define-key map (kbd "C-c t") #'inline-cr-find-cr-mentions)
-    (define-key map (kbd "C-c T") #'inline-cr-find-project-cr-mentions)
-
     (define-key map (kbd "C-c RET") #'inline-cr-maybe-toggle-cr-xcr)
     (define-key map (kbd "RET") #'inline-cr-maybe-extend-thread)
     (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
