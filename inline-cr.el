@@ -38,7 +38,8 @@
 
 (defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
-  (format  "^\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*\\(?:\n>\\s-*$\\)?"))
+  (format
+   "^\s*> \\(\\(X?\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*\\(?:\n>\\s-*$\\)?"))
 (defun inline-cr-tk-regex ()
   "Regex to match the mentioned user in a TK or TODO comment."
   (format  "^\s*> \\(\\TK|TODO\\) \\([^ ]+\\):.*"))
@@ -149,7 +150,9 @@
 (defun inline-cr--goto-actionable (direction)
   "Move to next/previous actionable CR/XCR comment for `inline-cr-user`, wrapping if needed."
   (let* ((step (if (eq direction 'next) 1 -1))
-         (search-fn (if (eq direction 'next) #'re-search-forward #'re-search-backward))
+         (search-fn
+          (if (eq direction 'next) #'re-search-forward
+            #'re-search-backward))
          (restart (if (eq direction 'next) (point-min) (point-max)))
          (limit (if (eq direction 'next) (point-max) (point-min)))
          (user (regexp-quote inline-cr-user))
@@ -173,7 +176,8 @@
           (setq found (line-beginning-position)))))
     (if found
         (goto-char found)
-      (message "No %s actionable comments for %s." (symbol-name direction) inline-cr-user))
+      (message "No %s actionable comments for %s."
+               (symbol-name direction) inline-cr-user))
     found))
 
 
@@ -228,7 +232,8 @@
         ;; (save-excursion
         (goto-char (car thread-bounds))
         (forward-line 1)
-        (while (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
+        (while
+            (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
           (when (match-string 2)
             (setq last-author (match-string 2)))
           (forward-line 1))
@@ -249,7 +254,9 @@
 (defun inline-cr-maybe-toggle-cr-xcr ()
   "Toggle the CR/XCR tag at the start of the current review thread."
   (interactive)
-  (if (or (inline-cr--at-thread-header-p) (inline-cr--at-thread-body-p))
+  (if
+      (or (inline-cr--at-thread-header-p)
+          (inline-cr--at-thread-body-p))
       (save-excursion
         ;; Move upward until not a >-prefixed line, or we hit BOF
         (while (and (not (bobp))
@@ -259,8 +266,10 @@
           (forward-line -1))
         (beginning-of-line)
         (cond
-         ((looking-at "^\s*> CR ") (replace-match ( format "> XCR ") t t))
-         ((looking-at "^\s*> XCR ") (replace-match ( format "> CR ") t t))
+         ((looking-at "^\s*> CR ")
+          (replace-match ( format "> XCR ") t t))
+         ((looking-at "^\s*> XCR ")
+          (replace-match ( format "> CR ") t t))
          ())
         (inline-cr--refresh-display))))
 
@@ -333,15 +342,18 @@
                     ;; Store file and line in the entry ID for lookup
                     (list (cons file line)
                           (vector
-                           (file-relative-name file (projectile-project-root))
+                           (file-relative-name file
+                                               (projectile-project-root))
                            (number-to-string line)
                            text))))
                 (inline-cr--collect-cr-mentions)))
   (setq tabulated-list-sort-key (cons "File" nil))
-  (add-hook 'tabulated-list-revert-hook #'inline-cr-list-all-project-mentions nil t)
+  (add-hook 'tabulated-list-revert-hook
+            #'inline-cr-list-all-project-mentions nil t)
 
   ;; Add RET handler
-  (define-key tabulated-list-mode-map (kbd "RET") #'inline-cr--visit-entry)
+  (define-key tabulated-list-mode-map (kbd "RET")
+              #'inline-cr--visit-entry)
 
   (tabulated-list-init-header)
   (tabulated-list-print))
@@ -360,7 +372,10 @@
 (defun inline-cr-list-all-project-mentions ()
   "Display a list of all CR/XCR mentions in a project in a clickable buffer."
   (interactive)
-  (let ((buf (get-buffer-create (format "* %s CR Actionables*" (projectile-project-name)))))
+  (let
+      ((buf
+        (get-buffer-create
+         (format "* %s CR Actionables*" (projectile-project-name)))))
     (with-current-buffer buf
       (inline-cr--mention-mode))
     (pop-to-buffer buf)))
@@ -386,7 +401,8 @@ If the head has `inline-cr-actionable` property, use the actionable face."
                                (line-beginning-position))
                            (line-beginning-position)))
              (head-end (line-end-position))
-             (actionable (get-text-property head-start 'inline-cr-actionable))
+             (actionable
+              (get-text-property head-start 'inline-cr-actionable))
              (face (if actionable
                        'inline-cr-actionable-block-face
                      'inline-cr-block-face)))
@@ -398,7 +414,10 @@ If the head has `inline-cr-actionable` property, use the actionable face."
         ;; Highlight thread body
         (forward-line 1)
         (while (and (not (eobp)) (looking-at "^.*> "))
-          (let ((ov (make-overlay (line-beginning-position) (line-end-position))))
+          (let
+              ((ov
+                (make-overlay (line-beginning-position)
+                              (line-end-position))))
             (overlay-put ov 'face face)
             (overlay-put ov 'inline-cr t))
           (forward-line 1))
@@ -495,9 +514,8 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   (interactive)
   (if (inline-cr--at-thread-header-p)
       (inline-cr--toggle-children)
-    (indent-for-tab-command)
-  ));; TODO do
-;; (outline-flag-region start_point end_point val) val = t for folded and nil for unfolded
+    (call-interactively (local-key-binding (kbd "TAB")))
+  ))
 
 (provide 'inline-cr)
 

@@ -130,7 +130,6 @@ If you have community plugins enabled already, you should see bismuth as an inst
 
 There are a couple commands to help with navigating through actionable CRs in a file. You can see what's available by doing Ctrl-p and typing "bismuth" and bind these commands to keys using Obsidian's hotkeys [[https://help.obsidian.md/hotkeys][support]].
 The plugin creates a little check box icon in the left sidebar that you can click to aggregate all actionable CRs for a vault.
-> CR elamdf for elamdf: auto build crscan
 
 Make sure to set your desired username in the settings menu,
 so actionable threads can be correctly identified!
