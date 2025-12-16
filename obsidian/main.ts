@@ -40,7 +40,7 @@ type InlineCrSettings = {
 
 const DEFAULT_SETTINGS: InlineCrSettings = {
   user: "",
-  useCrscan: true,
+  useCrscan: false,
   crscanPath: "crscan",
   crscanExts: "md markdown txt",
 };
