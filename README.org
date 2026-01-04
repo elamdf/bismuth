@@ -139,3 +139,5 @@ so actionable threads can be correctly identified!
 some features that would be nice
 - see actionables created by recent git commits
 * TODOs
+** TODO support non-markdown programming languages
+This should just be a question of updating the regexes to allow whitespace/comment prefixes for a CR and maybe fixing some of the thread navigation helpers so toggles/thread extensions don't blow up the source code
