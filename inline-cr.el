@@ -360,9 +360,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     (define-key map (kbd "RET") #'inline-cr-maybe-extend-thread)
     (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
     (define-key map (kbd "C-RET") #'inline-cr-insert-review-comment)
-    (define-key map (kbd "<TAB>") #' inline-cr-maybe-toggle-children)
-
-
+    (define-key map (kbd "C-<tab>") #'inline-cr-maybe-toggle-children)
+    ; TODO it seems like menu-item with a filter for at thread header is a cleaner way to not safely 'maybe' overwrite the (much otherwise used) tab keybinding, but I can't seem to get it to work
+                                        ;'(menu-item "" ,inline-cr-maybe-toggle-children :filter ,(lambda (_) inline-cr--at-thread-header-p)))
     map)
   "Keymap for inline-cr-mode.")
 
@@ -414,19 +414,18 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   )
 
 
+
 (defun inline-cr-maybe-toggle-children ()
   "Show or hide the current thread depending on its current state, if we are in one."
   (interactive)
   (if (inline-cr--at-thread-header-p)
       (save-excursion
-         (inline-cr--back-to-header)
-         (if (not (outline-invisible-p (pos-eol)))
-             (inline-cr--hide-thread)
-           (inline-cr--show-thread)
-           ))
-       (call-interactively (local-key-binding (kbd "TAB")))
-       ))
+        (inline-cr--back-to-header)
+        (if (not (outline-invisible-p (pos-eol)))
+            (inline-cr--hide-thread)
+          (inline-cr--show-thread)
+          ))
+    ))
 
-  (provide 'inline-cr)
-
+(provide 'inline-cr)
 ;;; inline-cr.el ends here
