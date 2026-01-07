@@ -25,7 +25,6 @@
 
 ;;; Code:
 
-(require 'tabulated-list)
 (require 'outline)
 (require 'projectile)
 (require 'cl-lib)
@@ -36,13 +35,21 @@
   "Inline code review utilities."
   :group 'tools)
 
+(defun comment-regex ()
+  ; > CR elamdf for elamdf: make this major mode specific
+  "A regular expression for comment prefixes."
+  (format "\\(//\\)*")
+  )
+
 (defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
-  (format
-   "^\s*> \\(\\(N\\)?\\(X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*\\(?:\n>\\s-*$\\)?"))
+
+  (format "^[ \t]*\\(%s\\)?[ \t]*> \\(\\(N\\)?\\(X\\)?CR\\) \\([^ ]+\\) for \\([^:]+\\):.*" (comment-regex))
+  )
+
 (defun inline-cr-thread-regex ()
   "Regex to match non-header lines of an inline CR, optionally capturing an author name."
-  (format "^\s*>\s*\\(\\(\\S-*\\):\\)?.*"))
+  (format "^[ \t]*\\(%s\\)?[ \t]*>\s*\\(\\(\\S-*\\):\\)?.*" (comment-regex)))
 
 
 ;; TODO C-RET to make a cr. TODO figure out author smartly
@@ -84,9 +91,9 @@
     (let ((case-fold-search nil))
 
       (while (re-search-forward (inline-cr-header-regex) nil t)
-        (let* ((kind (match-string 1)) ;; "CR" or "XCR"
-               (who (match-string 4))
-               (whom (match-string 5))
+        (let* ((kind (match-string 3)) ;; "CR" or "XCR"
+               (who (match-string 6))
+               (whom (match-string 7))
                (beg (match-beginning 0))
                (end (match-end 0)))
           (progn (if (or
@@ -175,7 +182,9 @@
 - If already in a thread, insert '> ' or '> user:'.
 - Only prefix with '> user:' if the last authored line was not by `inline-cr-user`.
 - Otherwise insert '> '.
+- If inserting a thread extension, use the comment character as the current line
 - Outside a thread, insert a normal newline."
+
   (interactive)
   (let ((user inline-cr-user)
         (prefix "")
@@ -191,16 +200,16 @@
         (forward-line 1)
         (while
             (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
-          (when (match-string 2)
-            (setq last-author (match-string 2)))
+          (when (match-string 4)
+            (setq last-author (match-string 4)))
+          (setq comment-str (match-string 1))
           (forward-line 1))
         (forward-line -1)
 
-
         (goto-char (line-end-position))
         (insert (if (not (string= last-author user))
-                    (format "\n%s> %s: " prefix user)
-                  (format "\n%s> " prefix)))
+                    (format "\n%s%s> %s: " comment-str prefix user)
+                  (format "\n%s%s> " comment-str prefix)))
         (goto-char (line-end-position))
         ))
 
