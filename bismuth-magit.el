@@ -16,7 +16,7 @@
   :type 'string
   :group 'bismuth-magit)
 
-(defcustom bismuth-magit-args '("--ext" "md" "--ext" "org" "--ext" "markdown" "--ext" "txt")
+(defcustom bismuth-magit-args '("--ext" "el" "--ext" "rs" "--ext" "md" "--ext" "org" "--ext" "markdown" "--ext" "txt"  "--ext" "rust")
   "Args passed to bismuth when scanning a repo."
   :type '(repeat string)
   :group 'bismuth-magit)
