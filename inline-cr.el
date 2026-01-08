@@ -278,6 +278,10 @@
 (defun inline-cr--end-of-header ()
   (progn (inline-cr--back-to-header) (end-of-line)))
 
+
+(defun inline-cr--end-of-cr-tag ()
+  (progn (inline-cr--back-to-header) (search-forward ":" (line-end-position) t)))
+
 (defun inline-cr--end-of-thread ()
   (goto-char (cdr (inline-cr--thread-boundaries))))
 
@@ -330,6 +334,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
                          'inline-cr-actionable-face
                        'inline-cr-nonactionable-face))
              )
+
         ;; Highlight head line, but with a lower priority than the actionable highlight
         (let ((ov (make-overlay head-start head-end)))
           (overlay-put ov 'face header)
@@ -415,7 +420,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (defun inline-cr--hide-thread ()
   "Hide a thread, foldering after the header line"
   (outline-flag-region
-   (progn (inline-cr--end-of-header) (point))
+   (progn (inline-cr--end-of-cr-tag) (point))
    (progn (inline-cr--end-of-thread) (point))
    t
    )
@@ -424,7 +429,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (defun inline-cr--show-thread ()
   "Show a thread, foldering after the header line"
   (outline-flag-region
-   (progn (inline-cr--end-of-header) (point))
+   (progn (inline-cr--end-of-cr-tag) (point))
    (progn (inline-cr--end-of-thread) (point))
    nil
    )
