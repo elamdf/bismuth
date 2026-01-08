@@ -197,13 +197,21 @@
       (progn
         ;; (save-excursion
         (goto-char (car thread-bounds))
+
+        (when (not (looking-at (inline-cr-header-regex)))
+          (error "Thread doesn't start with a header!"))
+
         (forward-line 1)
+        (setq last-author (match-string 6))
+
+        (setq comment-str "")
         (while
             (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
           (when (match-string 4)
             (setq last-author (match-string 4)))
           (setq comment-str (match-string 1))
-          (forward-line 1))
+          (forward-line 1)
+          )
         (forward-line -1)
 
         (goto-char (line-end-position))
