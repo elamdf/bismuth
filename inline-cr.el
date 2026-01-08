@@ -286,13 +286,17 @@
 (defun inline-cr--thread-boundaries ()
   "Return (START . END) of current CR/XCR thread, or nil."
   (save-excursion
-    (goto-char (line-beginning-position))
+
+        (goto-char (line-beginning-position))
+    (if (looking-at (inline-cr-thread-regex))
     (let (start end)
       ;; Move to top of thread
       (while (and (not (bobp))
                   (save-excursion
                     (forward-line -1)
-                    (looking-at (inline-cr-thread-regex))))
+                    (looking-at (inline-cr-thread-regex))
+
+                    ))
         (forward-line -1))
       (when (looking-at (inline-cr-header-regex))
         (setq start (point))
@@ -302,7 +306,7 @@
                       (forward-line 1)
                       (looking-at (inline-cr-thread-regex)))))
         (setq end (point))
-        (cons start end)))))
+        (cons start end))))))
 
 
 ;; TODO (elamdf) this should do markdown formatting even in non-markdown files
