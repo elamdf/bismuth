@@ -38,7 +38,7 @@
 (defun comment-regex ()
 ; > CR elamdf for elamdf: make this major mode specific
   "A regular expression for comment prefixes."
-  (format "\\((//\\|;\\)*")
+  (format "\\(//\\|;\\)*")
   )
 
 (defun inline-cr-header-regex ()
@@ -52,7 +52,7 @@
   (format "^[ \t]*\\(%s\\)?[ \t]*>\s*\\(\\(\\S-*\\):\\)?.*" (comment-regex)))
 
 
-;; TODO C-RET to make a cr. TODO figure out author smartly
+; > CR elamdf for elamdf: C-RET to make a cr. TODO figure out author smartly
 
 (defcustom inline-cr-user(getenv "USER")
   "Username used to determine which comments require your response."
@@ -80,8 +80,6 @@
 
   "Face for actionable inline code review blocks.")
 
-
-;; > CR elamdf for elamdf: fix inline crs for non-markdown source files (i.e. allow comment prefix for > CR
 
 (defun inline-cr--scan-for-actionables (start end)
   "Apply `inline-cr-actionable` text property to actionable CR/XCR lines between START and END."
@@ -204,7 +202,7 @@
         (forward-line 1)
         (setq last-author (match-string 6))
 
-        (setq comment-str "")
+        (setq comment-str (or (match-string 1) ""))
         (while
             (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
           (when (match-string 4)
