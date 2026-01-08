@@ -418,7 +418,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (defun inline-cr--hide-thread ()
   "Hide a thread, foldering after the header line"
   (outline-flag-region
-   (progn (inline-cr--end-of-cr-tag) (point))
+   (progn (if (get-text-property (point) 'inline-cr-active) (inline-cr--end-of-header) (inline-cr--end-of-cr-tag)) (point))
    (progn (inline-cr--end-of-thread) (point))
    t
    )
@@ -427,7 +427,7 @@ If the head has `inline-cr-actionable` property, use the actionable face."
 (defun inline-cr--show-thread ()
   "Show a thread, foldering after the header line"
   (outline-flag-region
-   (progn (inline-cr--end-of-cr-tag) (point))
+   (progn (inline-cr--back-to-header) (point))
    (progn (inline-cr--end-of-thread) (point))
    nil
    )
@@ -446,7 +446,6 @@ If the head has `inline-cr-actionable` property, use the actionable face."
           (inline-cr--show-thread)
           ))
     ))
-                                        ; > CR elamdf for elamdf: fold inactive (N-prefixed) threads after the : in the header instead of at the end of the header
 
 (provide 'inline-cr)
 ;;; inline-cr.el ends here
