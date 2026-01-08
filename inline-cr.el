@@ -413,9 +413,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
     ))
 
 
-;; TODO make <cr expand to > CR $user for (fill out):
-;; todo make <td expand to >CR $user for $user:
-
+; > CR elamdf for elamdf:  make <cr expand to > CR $user for (fill out):
+; > CR elamdf for elamdf:  make <td expand to >CR $user for $user:
+; > CR elamdf for elamdf: auto hide inactive threads on file load
 ;; we want a top of thread, end of heading, and end of thread functions
 (defun inline-cr--hide-thread ()
   "Hide a thread, foldering after the header line"
