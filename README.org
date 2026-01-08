@@ -67,6 +67,8 @@ exactly the same as the code changed alongside it.
 The N prefix to CR or XCR marks a thread inactive,
 removing it from the actionable list of both author and reviewer without deleting the text.
 
+CR headers and threads may be optionally prefixed with a configurable comment string (see =comment-regex= in =inline-cr.el=) to facilitate usage outside of markup languages.
+
 ** How Bismuth Makes Code Reviews Easier
 For now, Bismuth
 - highlights actionable and non-actionable CR threads based on the author's username
