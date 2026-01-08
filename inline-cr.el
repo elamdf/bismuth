@@ -36,9 +36,9 @@
   :group 'tools)
 
 (defun comment-regex ()
-  ; > CR elamdf for elamdf: make this major mode specific
+; > CR elamdf for elamdf: make this major mode specific
   "A regular expression for comment prefixes."
-  (format "\\(//\\)*")
+  (format "\\((//\\|;\\)*")
   )
 
 (defun inline-cr-header-regex ()
