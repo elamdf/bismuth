@@ -1,3 +1,4 @@
+// Mostly written by chatgpt with the emacs parsing implementation as a reference
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use regex::Regex;
@@ -35,8 +36,9 @@ fn main() -> Result<()> {
     // 1 = kind (CR or XCR)
     // 2 = reviewer (no spaces)
     // 3 = author (anything up to :)
-    let header_re = Regex::new(r"^\s*>\s*(X?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$")
-        .context("failed to compile header regex")?;
+    let header_re =
+        Regex::new(r"^[ \t]*((?://)*)?[ \t]*>\s*((N)?(X)?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$")
+            .context("failed to compile header regex")?;
 
     let mut out: BTreeMap<String, BTreeMap<String, serde_json::Value>> = BTreeMap::new();
 
@@ -81,7 +83,10 @@ fn main() -> Result<()> {
             }
         }
     } else {
-        bail!("path is neither file nor directory: {}", args.path.display());
+        bail!(
+            "path is neither file nor directory: {}",
+            args.path.display()
+        );
     }
 
     let v = serde_json::Value::Object(
@@ -117,9 +122,9 @@ fn scan_file(path: &Path, header_re: &Regex) -> Result<BTreeMap<String, serde_js
         let line = lines[i];
 
         if let Some(caps) = header_re.captures(line) {
-            let kind = caps.get(1).unwrap().as_str();
-            let reviewer = caps.get(2).unwrap().as_str();
-            let author = caps.get(3).unwrap().as_str().trim();
+            let kind = caps.get(2).unwrap().as_str();
+            let reviewer = caps.get(5).unwrap().as_str();
+            let author = caps.get(6).unwrap().as_str().trim();
 
             let header = line.to_string();
 
@@ -155,10 +160,7 @@ fn scan_file(path: &Path, header_re: &Regex) -> Result<BTreeMap<String, serde_js
             let line_no = (i + 1).to_string();
 
             // Store as: line_number : [CR/XCR, reviewer, author, header, thread]
-            file_map.insert(
-                line_no,
-                json!([kind, reviewer, author, header, thread]),
-            );
+            file_map.insert(line_no, json!([kind, reviewer, author, header, thread]));
 
             i = j;
             continue;
