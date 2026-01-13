@@ -5,6 +5,8 @@
 (require 'magit-section)
 (require 'json)
 (require 'subr-x)
+(require 'compile)
+(require 'inline-cr)
 
 (defgroup bismuth-magit nil
   "Show CR/XCR actionables from bismuth in Magit status."
@@ -24,9 +26,93 @@
   :type '(repeat string)
   :group 'bismuth-magit)
 
+
+(defcustom inline-cr--bismuth-dir (concat user-emacs-directory "/bismuth/")
+  "Path to the bismuth directory."
+  :type 'string
+  :group 'inline-cr)
+
+;; > CR elamdf for elamdf: fix hardcoded path
+(defcustom inline-cr-gh-sync-script "scripts/inline-cr-gh-sync.py"
+  "Path to the gh sync script executable, relative to bismuth."
+  :type 'string
+  :group 'inline-cr)
+
 (defun bismuth-magit--repo-root ()
   (or (magit-toplevel) (user-error "Not in a Git repository")))
 
+(defun bismuth-magit--pull-inline-cr-for-pullreq (pullreq)
+  "Pull inline-cr comments for PULLREQ without prompting."
+  (condition-case err
+      (let* ((pr (forge-get-pullreq pullreq))
+             (number (oref pr number)))
+        (when number
+          (inline-cr-sync-gh number "pull" t nil)))
+    (error (message "inline-cr: pull after checkout failed: %s" err))))
+
+(defun inline-cr--project-root ()
+  "Return the current project root if available."
+  (or (and (fboundp 'magit-toplevel) (magit-toplevel))
+      (and (fboundp 'projectile-project-root) (projectile-project-root))
+      default-directory))
+
+(defun inline-cr-sync-gh (pr-number action auto-commit auto-push)
+  "Sync inline-cr threads with GitHub PR review comments."
+  (interactive
+   (let* ((pr (read-number "PR number: "))
+          (action (completing-read "Sync action: " '("pull" "push" "pull-then-push") nil t "pull")))
+     (cond
+      ((string= action "pull")
+       (list pr action t nil))
+      ((string= action "pull-then-push")
+       (list pr action t (y-or-n-p "Auto-push after commit? ")))
+      (t
+       (list pr action
+             (y-or-n-p "Auto-commit updates? ")
+             (y-or-n-p "Auto-push after commit? "))))))
+  (let* ((root (inline-cr--project-root))
+         (script (expand-file-name inline-cr-gh-sync-script inline-cr--bismuth-dir)))
+    (if (not (file-exists-p script))
+        (message "inline-cr: sync script not found at %s" script)
+      (let* ((default-directory root)
+             (mode (cond
+                    ((string= action "pull") "gh-to-inline")
+                    ((string= action "push") "inline-to-gh")
+                    (t "both")))
+             (cmd (format "python3 %s --pr %s --mode %s"
+                          (shell-quote-argument script)
+                          (shell-quote-argument (number-to-string pr-number))
+                          (shell-quote-argument mode)))
+             (args ""))
+        (when (string= action "pull")
+          (setq auto-commit t)
+          (setq auto-push nil)
+          (setq args (concat args " --pull-only")))
+        (when auto-commit
+          (setq args (concat args " --auto-commit")))
+        (when auto-push
+          (setq args (concat args " --auto-push")))
+        (setq cmd (concat cmd args))
+        (let ((comp-buf (compilation-start cmd 'compilation-mode
+                                            (lambda (_) "*inline-cr sync*"))))
+          (with-current-buffer comp-buf
+            (add-hook
+             'compilation-finish-functions
+             (lambda (_buf msg)
+               (when (and (string-match-p "finished" msg)
+                          (member action '("pull" "pull-then-push")))
+                 (save-excursion
+                   (goto-char (point-min))
+                   (while (re-search-forward "^updated: \\(.*\\)$" nil t)
+                     (let* ((rel (match-string 1))
+                            (path (expand-file-name rel root)))
+                       (when-let ((file-buf (find-buffer-visiting path)))
+                         (with-current-buffer file-buf
+                           (revert-buffer nil t))))))
+                 (when (fboundp 'magit-refresh)
+                   (magit-refresh))))
+             nil
+             t)))))))
 (defun bismuth-magit--run (root)
   "Run bismuth on ROOT and return parsed JSON as an alist (file -> alist(line -> list))."
   (let* ((default-directory root)
@@ -117,5 +203,14 @@
                                       (define-key m (kbd "<return>") #'bismuth-magit--visit)
                                       (define-key m [mouse-1] #'bismuth-magit--visit)
                                       m))))))))))))))))
+
+(with-eval-after-load 'magit
+  (define-key magit-status-mode-map (kbd "C-c C-i") #'inline-cr-sync-gh))
+
+(with-eval-after-load 'forge
+  (advice-add 'forge-checkout-pullreq :after #'bismuth-magit--pull-inline-cr-for-pullreq)
+  (advice-add 'forge-checkout-worktree :after
+              (lambda (_path pullreq)
+                (bismuth-magit--pull-inline-cr-for-pullreq pullreq))))
 
 (provide 'bismuth-magit)

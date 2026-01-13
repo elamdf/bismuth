@@ -30,15 +30,16 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // Header regex:
-    // ^\s*>\s*(X?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$
+    // ^\s*(\[#gh:\d+\]\s*)?>\s*(X?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$
     //
     // Groups:
     // 1 = kind (CR or XCR)
     // 2 = reviewer (no spaces)
     // 3 = author (anything up to :)
-    let header_re =
-        Regex::new(r"^[ \t]*((?://)*)?[ \t]*>\s*((N)?(X)?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$")
-            .context("failed to compile header regex")?;
+    let header_re = Regex::new(
+        r"^[ \t]*((?://)*)?[ \t]*(\[#gh:\d+\]\s*)?>\s*((N)?(X)?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$",
+    )
+    .context("failed to compile header regex")?;
 
     let mut out: BTreeMap<String, BTreeMap<String, serde_json::Value>> = BTreeMap::new();
 
@@ -122,9 +123,9 @@ fn scan_file(path: &Path, header_re: &Regex) -> Result<BTreeMap<String, serde_js
         let line = lines[i];
 
         if let Some(caps) = header_re.captures(line) {
-            let kind = caps.get(2).unwrap().as_str();
-            let reviewer = caps.get(5).unwrap().as_str();
-            let author = caps.get(6).unwrap().as_str().trim();
+            let kind = caps.get(3).unwrap().as_str();
+            let reviewer = caps.get(6).unwrap().as_str();
+            let author = caps.get(7).unwrap().as_str().trim();
 
             let header = line.to_string();
 

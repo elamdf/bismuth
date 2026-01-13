@@ -7,22 +7,27 @@ import subprocess
 import sys
 
 HEADER_RE = re.compile(
-    r"^(?P<prefix>\s*(?:(?://|;)\s*)*)>\s*(?P<kind>N?X?CR)\s+"
-    r"(?P<reviewer>[^ ]+)\s+for\s+(?P<author>[^:]+):\s*(?P<body>.*?)(?P<tag>\s+\[#gh:(?P<ghid>\d+)\])?\s*$"
+    r"^(?P<prefix>\s*(?:(?://|;)\s*)*)"
+    r"(?P<tag>\[#gh:(?P<ghid>\d+)\]\s*)?>\s*(?P<kind>N?X?CR)\s+"
+    r"(?P<reviewer>[^ ]+)\s+for\s+(?P<author>[^:]+):\s*(?P<body>.*?)"
+    r"(?P<trailing>\s+\[#gh:(?P<ghid2>\d+)\])?\s*$"
 )
 REPLY_RE = re.compile(
-    r"^(?P<prefix>\s*(?:(?://|;)\s*)*)>\s*(?:(?P<speaker>[^:]+):\s*)?"
-    r"(?P<body>.*?)(?P<tag>\s+\[#gh:(?P<ghid>\d+)\])?\s*$"
+    r"^(?P<prefix>\s*(?:(?://|;)\s*)*)"
+    r"(?P<tag>\[#gh:(?P<ghid>\d+)\]\s*)?>\s*(?:(?P<speaker>[^:]+):\s*)?"
+    r"(?P<body>.*?)"
+    r"(?P<trailing>\s+\[#gh:(?P<ghid2>\d+)\])?\s*$"
 )
 
 
-def run(cmd, input_data=None):
+def run(cmd, input_data=None, cwd=None):
     result = subprocess.run(
         cmd,
         input=input_data,
         text=True,
         capture_output=True,
         check=False,
+        cwd=cwd,
     )
     if result.returncode != 0:
         raise RuntimeError(
@@ -50,6 +55,29 @@ def split_repo(repo):
         raise ValueError("Expected repo in owner/name format, got: {}".format(repo))
     owner, name = repo.split("/", 1)
     return owner, name
+
+
+def git_root():
+    return run(["git", "rev-parse", "--show-toplevel"]).strip()
+
+
+def git_status_porcelain(paths, cwd):
+    if not paths:
+        return ""
+    return run(["git", "status", "--porcelain", "--"] + paths, cwd=cwd).strip()
+
+
+def git_add(paths, cwd):
+    if paths:
+        run(["git", "add", "--"] + paths, cwd=cwd)
+
+
+def git_commit(message, cwd):
+    return run(["git", "commit", "-m", message], cwd=cwd)
+
+
+def git_push(cwd):
+    return run(["git", "push"], cwd=cwd)
 
 
 def get_pr_info(repo, pr_number):
@@ -156,19 +184,17 @@ def default_comment_prefix(path):
 
 
 def format_header(prefix, kind, reviewer, author, body, ghid=None, newline="\n"):
-    line = "{}> {} {} for {}: {}".format(prefix, kind, reviewer, author, body)
-    if ghid:
-        line += " [#gh:{}]".format(ghid)
+    tag = "[#gh:{}] ".format(ghid) if ghid else ""
+    line = "{}{}> {} {} for {}: {}".format(prefix, tag, kind, reviewer, author, body)
     return line + newline
 
 
 def format_reply(prefix, speaker, body, ghid=None, newline="\n"):
+    tag = "[#gh:{}] ".format(ghid) if ghid else ""
     if speaker:
-        line = "{}> {}: {}".format(prefix, speaker, body)
+        line = "{}{}> {}: {}".format(prefix, tag, speaker, body)
     else:
-        line = "{}> {}".format(prefix, body)
-    if ghid:
-        line += " [#gh:{}]".format(ghid)
+        line = "{}{}> {}".format(prefix, tag, body)
     return line + newline
 
 
@@ -189,7 +215,9 @@ def parse_inline_threads(lines):
                 "author": m.group("author"),
                 "speaker": None,
                 "body": m.group("body") or "",
-                "ghid": int(m.group("ghid")) if m.group("ghid") else None,
+                "ghid": int(m.group("ghid") or m.group("ghid2"))
+                if (m.group("ghid") or m.group("ghid2"))
+                else None,
                 "line_index": i,
                 "is_header": True,
             }
@@ -208,7 +236,9 @@ def parse_inline_threads(lines):
                     "author": None,
                     "speaker": (m2.group("speaker") or "").strip() or None,
                     "body": m2.group("body") or "",
-                    "ghid": int(m2.group("ghid")) if m2.group("ghid") else None,
+                    "ghid": int(m2.group("ghid") or m2.group("ghid2"))
+                    if (m2.group("ghid") or m2.group("ghid2"))
+                    else None,
                     "line_index": i,
                     "is_header": False,
                 }
@@ -295,6 +325,14 @@ def normalize_gh_body(text):
     return squash_body(text)
 
 
+def desired_header_kind(last_author, reviewer, author, fallback_kind="CR"):
+    if last_author and reviewer and last_author == reviewer:
+        return "CR"
+    if last_author and author and last_author == author:
+        return "XCR"
+    return fallback_kind
+
+
 def apply_inline_updates(path, lines, updates, insertions):
     for line_index, new_line in updates.items():
         lines[line_index] = new_line
@@ -326,8 +364,33 @@ def main():
         "--comment-prefix",
         help="Override comment prefix for new inline threads (ex: '// ').",
     )
+    parser.add_argument(
+        "--pull-only",
+        action="store_true",
+        help="Only pull from GitHub into inline-cr threads.",
+    )
+    parser.add_argument(
+        "--auto-commit",
+        action="store_true",
+        help="Commit updated inline-cr files after sync.",
+    )
+    parser.add_argument(
+        "--auto-push",
+        action="store_true",
+        help="Push after auto-commit.",
+    )
+    parser.add_argument(
+        "--commit-message",
+        default="Sync inline-cr threads from GitHub",
+        help="Commit message used with --auto-commit.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Report actions only.")
     args = parser.parse_args()
+
+    if args.pull_only:
+        args.mode = "gh-to-inline"
+        if args.prefer == "inline":
+            args.prefer = "github"
 
     repo = get_repo_name(args.repo)
     owner, name = split_repo(repo)
@@ -468,6 +531,31 @@ def main():
                         break
                 if existing_thread:
                     prefix = existing_thread["prefix"] or args.comment_prefix or default_comment_prefix(path)
+                    header_inline = existing_thread["comments"][0]
+                    header_line_index = header_inline["line_index"]
+                    header_original_line = lines[header_line_index]
+                    header_newline = "\n" if not header_original_line.endswith("\n") else ""
+                    reviewer = header_inline["reviewer"]
+                    author = header_inline["author"] or pr_author
+                    last_author = None
+                    header_gh = gh_comments_list[0] if gh_comments_list else None
+                    if gh_comments_list:
+                        last = gh_comments_list[-1]
+                        if last.get("author"):
+                            last_author = last["author"]["login"]
+                    desired_kind = desired_header_kind(
+                        last_author, reviewer, author, fallback_kind=header_inline["kind"] or "CR"
+                    )
+                    header_ghid = header_inline["ghid"]
+                    if not header_ghid and header_gh:
+                        header_ghid = header_gh.get("databaseId")
+                    header_body = header_inline["body"]
+                    header_body_changed = False
+                    if args.prefer == "github" and header_gh:
+                        gh_body = normalize_gh_body(header_gh["body"])
+                        if gh_body != normalize_inline_body(header_body):
+                            header_body = gh_body
+                            header_body_changed = True
                     insert_after = existing_thread["end"]
                     new_lines = []
                     for comment in gh_comments_list:
@@ -484,9 +572,9 @@ def main():
                                     if inline_comment["is_header"]:
                                         new_line = format_header(
                                             prefix,
-                                            inline_comment["kind"],
-                                            inline_comment["reviewer"],
-                                            inline_comment["author"],
+                                            desired_kind,
+                                            reviewer,
+                                            author,
                                             gh_body,
                                             ghid=ghid,
                                             newline=newline or "\n",
@@ -506,6 +594,21 @@ def main():
                         new_lines.append(
                             format_reply(prefix, speaker, body, ghid=ghid, newline="\n")
                         )
+                    if header_inline and (
+                        header_inline["kind"] != desired_kind
+                        or header_body_changed
+                        or (header_ghid and header_inline["ghid"] != header_ghid)
+                    ):
+                        header_line = format_header(
+                            prefix,
+                            desired_kind,
+                            reviewer,
+                            author,
+                            header_body,
+                            ghid=header_ghid,
+                            newline=header_newline or "\n",
+                        )
+                        updates_by_path[path][header_line_index] = header_line
                     if new_lines:
                         insertions_by_path[path].append((insert_after, new_lines))
                     continue
@@ -516,10 +619,15 @@ def main():
                 prefix = args.comment_prefix or default_comment_prefix(path)
                 reviewer = first["author"]["login"] if first.get("author") else "reviewer"
                 header_body = normalize_gh_body(first["body"])
+                last_author = None
+                last = gh_comments_list[-1]
+                if last.get("author"):
+                    last_author = last["author"]["login"]
+                header_kind = desired_header_kind(last_author, reviewer, pr_author, fallback_kind="CR")
                 new_lines = [
                     format_header(
                         prefix,
-                        "CR",
+                        header_kind,
                         reviewer,
                         pr_author,
                         header_body,
@@ -546,13 +654,28 @@ def main():
         print("dry-run: no files written")
         return 0
 
+    updated_paths = []
     for path, lines in file_lines_by_path.items():
         updates = updates_by_path.get(path) or {}
         insertions = insertions_by_path.get(path) or []
         if not updates and not insertions:
             continue
         apply_inline_updates(path, lines, updates, insertions)
+        updated_paths.append(path)
         print("updated: {}".format(path))
+
+    if updated_paths and args.auto_commit and not args.dry_run:
+        root = git_root()
+        rel_paths = [os.path.relpath(p, root) for p in updated_paths]
+        if git_status_porcelain(rel_paths, cwd=root):
+            git_add(rel_paths, cwd=root)
+            git_commit(args.commit_message, cwd=root)
+            print("committed: {}".format(args.commit_message))
+            if args.auto_push:
+                git_push(cwd=root)
+                print("pushed: {}".format(root))
+        else:
+            print("skip: no git changes to commit")
 
     return 0
 
