@@ -10,13 +10,16 @@
   "Show CR/XCR actionables from bismuth in Magit status."
   :group 'magit)
 
+
 ;; > CR elamdf for elamdf: fix hardcoded path
 (defcustom bismuth-magit-binary (concat user-emacs-directory "/bismuth/parser/target/release/crscan")
-  "Path to the bismuth executable."
+  "Path to the crscan executable."
   :type 'string
   :group 'bismuth-magit)
 
+
 (defcustom bismuth-magit-args '("--ext" "el" "--ext" "rs" "--ext" "md" "--ext" "org" "--ext" "markdown" "--ext" "txt"  "--ext" "rust")
+
   "Args passed to bismuth when scanning a repo."
   :type '(repeat string)
   :group 'bismuth-magit)

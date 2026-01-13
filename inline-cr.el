@@ -38,8 +38,9 @@
 (defun comment-regex ()
 ; > CR elamdf for elamdf: make this major mode specific
   "A regular expression for comment prefixes."
-  (format "\\(//\\|;\\)*")
-  )
+
+  (format "\\(?:\\(?:/[/]\\|;\\)\\s-*\\)*"))
+
 
 (defun inline-cr-header-regex ()
   "Regex to match the reviewer and author of an [X]CR header."
@@ -49,7 +50,7 @@
 
 (defun inline-cr-thread-regex ()
   "Regex to match non-header lines of an inline CR, optionally capturing an author name."
-  (format "^[ \t]*\\(%s\\)?[ \t]*>\s*\\(\\(\\S-*\\):\\)?.*" (comment-regex)))
+  (format "^[ \t]*\\(%s\\)?[ \t]*>\\s-*\\(\\(\\S-*\\):\\)?.*" (comment-regex)))
 
 
 ; > CR elamdf for elamdf: C-RET to make a cr. TODO figure out author smartly
@@ -58,6 +59,45 @@
   "Username used to determine which comments require your response."
   :type 'string
   :group 'inline-cr)
+
+
+(defcustom  inline-cr--bismuth-dir (concat user-emacs-directory "/bismuth/")
+  "Path to the bismuth directory."
+  :type 'string
+  :group 'inline-cr)
+
+
+;; > CR elamdf for elamdf: fix hardcoded path
+(defcustom  inline-cr-gh-sync-script "scripts/inline-cr-gh-sync.py"
+  "Path to the gh sync script executable, relative to bismuth."
+  :type 'string
+  :group 'inline-cr)
+
+
+
+
+(defun inline-cr--project-root ()
+  "Return the current project root if available."
+  (or (and (fboundp 'magit-toplevel) (magit-toplevel))
+      (and (fboundp 'projectile-project-root) (projectile-project-root))
+      default-directory))
+
+(defun inline-cr-sync-gh (pr-number mode)
+  "Sync inline-cr threads with GitHub PR review comments."
+  (interactive
+   (list (read-number "PR number: ")
+         (completing-read "Sync mode: " '("both" "inline-to-gh" "gh-to-inline") nil t "both")))
+  (let* ((root (inline-cr--project-root))
+         (script (expand-file-name inline-cr-gh-sync-script inline-cr--bismuth-dir)))
+    (if (not (file-exists-p script))
+        (message "inline-cr: sync script not found at %s" script)
+      (let ((default-directory root)
+            (cmd (format "python3 %s --pr %s --mode %s"
+                         (shell-quote-argument script)
+                         (shell-quote-argument (number-to-string pr-number))
+                         (shell-quote-argument mode))))
+        (compilation-start cmd 'compilation-mode
+                           (lambda (_) "*inline-cr sync*"))))))
 
 (defface inline-cr-actionable-face
   '((t :weight bold :foreground "black"))
@@ -389,6 +429,9 @@ If the head has `inline-cr-actionable` property, use the actionable face."
                                         ;'(menu-item "" ,inline-cr-maybe-toggle-children :filter ,(lambda (_) inline-cr--at-thread-header-p)))
     map)
   "Keymap for inline-cr-mode.")
+
+(with-eval-after-load 'magit
+  (define-key magit-status-mode-map (kbd "C-c C-i") #'inline-cr-sync-gh))
 
 (defun inline-cr--refresh-display-rest (&rest _)
   (inline-cr--refresh-display))
