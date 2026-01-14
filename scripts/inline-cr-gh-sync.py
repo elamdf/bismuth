@@ -7,13 +7,13 @@ import subprocess
 import sys
 
 HEADER_RE = re.compile(
-    r"^(?P<prefix>\s*(?:(?://|;)\s*)*)"
+    r"^(?P<prefix>\s*(?:(?://|;|#)\s*)*)"
     r"(?P<tag>\[#gh:(?P<ghid>\d+)\]\s*)?>\s*(?P<kind>N?X?CR)\s+"
     r"(?P<reviewer>[^ ]+)\s+for\s+(?P<author>[^:]+):\s*(?P<body>.*?)"
     r"(?P<trailing>\s+\[#gh:(?P<ghid2>\d+)\])?\s*$"
 )
 REPLY_RE = re.compile(
-    r"^(?P<prefix>\s*(?:(?://|;)\s*)*)"
+    r"^(?P<prefix>\s*(?:(?://|;|#)\s*)*)"
     r"(?P<tag>\[#gh:(?P<ghid>\d+)\]\s*)?>\s*(?:(?P<speaker>[^:]+):\s*)?"
     r"(?P<body>.*?)"
     r"(?P<trailing>\s+\[#gh:(?P<ghid2>\d+)\])?\s*$"
@@ -61,21 +61,6 @@ def git_root():
     return run(["git", "rev-parse", "--show-toplevel"]).strip()
 
 
-def git_status_porcelain(paths, cwd):
-    if not paths:
-        return ""
-    return run(["git", "status", "--porcelain", "--"] + paths, cwd=cwd).strip()
-
-
-def git_add(paths, cwd):
-    if paths:
-        run(["git", "add", "--"] + paths, cwd=cwd)
-
-
-def git_commit(message, cwd):
-    return run(["git", "commit", "-m", message], cwd=cwd)
-
-
 def git_push(cwd):
     return run(["git", "push"], cwd=cwd)
 
@@ -106,6 +91,7 @@ query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
     pullRequest(number: $number) {
       reviewThreads(first: 100, after: $cursor) {
         nodes {
+          id
           path
           line
           originalLine
@@ -180,6 +166,8 @@ def default_comment_prefix(path):
         ".mm",
     }:
         return "// "
+    if ext in {"py", "toml"}:
+        return "# "
     return ""
 
 
@@ -215,9 +203,11 @@ def parse_inline_threads(lines):
                 "author": m.group("author"),
                 "speaker": None,
                 "body": m.group("body") or "",
-                "ghid": int(m.group("ghid") or m.group("ghid2"))
-                if (m.group("ghid") or m.group("ghid2"))
-                else None,
+                "ghid": (
+                    int(m.group("ghid") or m.group("ghid2"))
+                    if (m.group("ghid") or m.group("ghid2"))
+                    else None
+                ),
                 "line_index": i,
                 "is_header": True,
             }
@@ -236,9 +226,11 @@ def parse_inline_threads(lines):
                     "author": None,
                     "speaker": (m2.group("speaker") or "").strip() or None,
                     "body": m2.group("body") or "",
-                    "ghid": int(m2.group("ghid") or m2.group("ghid2"))
-                    if (m2.group("ghid") or m2.group("ghid2"))
-                    else None,
+                    "ghid": (
+                        int(m2.group("ghid") or m2.group("ghid2"))
+                        if (m2.group("ghid") or m2.group("ghid2"))
+                        else None
+                    ),
                     "line_index": i,
                     "is_header": False,
                 }
@@ -265,7 +257,9 @@ def write_file_lines(path, lines):
         f.write("".join(lines))
 
 
-def gh_create_review_comment(repo, pr_number, body, path, line, side, commit_id, in_reply_to=None):
+def gh_create_review_comment(
+    repo, pr_number, body, path, line, side, commit_id, in_reply_to=None
+):
     args = [
         "api",
         "-X",
@@ -296,6 +290,28 @@ def gh_update_review_comment(repo, comment_id, body):
             "repos/{}/pulls/comments/{}".format(repo, comment_id),
             "-f",
             "body={}".format(body),
+        ]
+    )
+
+
+def gh_resolve_review_thread(thread_id):
+    query = """
+mutation($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread {
+      isResolved
+    }
+  }
+}
+"""
+    gh_json(
+        [
+            "api",
+            "graphql",
+            "-f",
+            "query={}".format(query),
+            "-F",
+            "threadId={}".format(thread_id),
         ]
     )
 
@@ -331,6 +347,12 @@ def desired_header_kind(last_author, reviewer, author, fallback_kind="CR"):
     if last_author and author and last_author == author:
         return "XCR"
     return fallback_kind
+
+
+def inactive_kind(kind):
+    if kind.startswith("N"):
+        return kind
+    return "N{}".format(kind)
 
 
 def apply_inline_updates(path, lines, updates, insertions):
@@ -370,19 +392,9 @@ def main():
         help="Only pull from GitHub into inline-cr threads.",
     )
     parser.add_argument(
-        "--auto-commit",
-        action="store_true",
-        help="Commit updated inline-cr files after sync.",
-    )
-    parser.add_argument(
         "--auto-push",
         action="store_true",
-        help="Push after auto-commit.",
-    )
-    parser.add_argument(
-        "--commit-message",
-        default="Sync inline-cr threads from GitHub",
-        help="Commit message used with --auto-commit.",
+        help="Push after sync.",
     )
     parser.add_argument("--dry-run", action="store_true", help="Report actions only.")
     args = parser.parse_args()
@@ -407,10 +419,11 @@ def main():
 
     inline_threads_by_path, ghid_to_inline = build_inline_index(file_lines_by_path)
 
-    threads = graphql_review_threads(owner, name, args.pr)
+    gh_threads = graphql_review_threads(owner, name, args.pr)
     gh_comments = {}
+    gh_comment_to_thread_id = {}
     gh_threads_by_path = {}
-    for thread in threads:
+    for thread in gh_threads:
         path = thread["path"]
         comments = thread.get("comments", {}).get("nodes") or []
         if not comments:
@@ -418,17 +431,35 @@ def main():
         line = thread.get("line") or thread.get("originalLine") or 1
         side = thread.get("diffSide") or "RIGHT"
         gh_threads_by_path.setdefault(path, []).append(
-            {"line": line, "side": side, "comments": comments}
+            {
+                "id": thread.get("id"),
+                "isResolved": thread.get("isResolved"),
+                "line": line,
+                "side": side,
+                "comments": comments,
+            }
         )
         for comment in comments:
             gh_comments[comment["databaseId"]] = comment
+            if thread.get("id"):
+                gh_comment_to_thread_id[comment["databaseId"]] = thread.get("id")
 
     updates_by_path = {path: {} for path in file_lines_by_path}
     insertions_by_path = {path: [] for path in file_lines_by_path}
 
     if args.mode in {"both", "inline-to-gh"}:
-        for path, threads in inline_threads_by_path.items():
-            for thread in threads:
+        for path, inline_threads in inline_threads_by_path.items():
+            for thread in inline_threads:
+                header_comment = thread["comments"][0] if thread["comments"] else None
+                if header_comment and header_comment.get("kind", "").startswith("N"):
+                    header_ghid = header_comment.get("ghid")
+                    thread_id = gh_comment_to_thread_id.get(header_ghid)
+                    if thread_id:
+                        if args.dry_run:
+                            print("resolve: gh thread {}".format(thread_id))
+                        else:
+                            gh_resolve_review_thread(thread_id)
+                            print("resolved: gh thread {}".format(thread_id))
                 for comment in thread["comments"]:
                     ghid = comment["ghid"]
                     line_index = comment["line_index"]
@@ -438,7 +469,9 @@ def main():
                     if ghid:
                         if ghid not in gh_comments:
                             print(
-                                "warn: inline comment {} not found on GitHub".format(ghid)
+                                "warn: inline comment {} not found on GitHub".format(
+                                    ghid
+                                )
                             )
                             continue
                         gh_body = normalize_gh_body(gh_comments[ghid]["body"])
@@ -452,7 +485,11 @@ def main():
                         print("skip: missing head sha, cannot create comments")
                         continue
                     target_line = line_index + 1
-                    prefix = thread["prefix"] or args.comment_prefix or default_comment_prefix(path)
+                    prefix = (
+                        thread["prefix"]
+                        or args.comment_prefix
+                        or default_comment_prefix(path)
+                    )
                     body = inline_body
                     if comment["is_header"]:
                         if args.dry_run:
@@ -515,6 +552,29 @@ def main():
                         )
                         updates_by_path[path][line_index] = new_line
 
+        threads_to_resolve = []
+        for gh_thread in gh_threads:
+            path = gh_thread["path"]
+            if path not in file_lines_by_path:
+                continue
+            comments = gh_thread.get("comments", {}).get("nodes") or []
+            if not comments:
+                continue
+            if any(comment["databaseId"] in ghid_to_inline for comment in comments):
+                continue
+            if gh_thread.get("isResolved"):
+                continue
+            thread_id = gh_thread.get("id")
+            if thread_id:
+                threads_to_resolve.append(thread_id)
+
+        for thread_id in threads_to_resolve:
+            if args.dry_run:
+                print("resolve: gh thread {}".format(thread_id))
+            else:
+                gh_resolve_review_thread(thread_id)
+                print("resolved: gh thread {}".format(thread_id))
+
     if args.mode in {"both", "gh-to-inline"}:
         for path, thread_list in gh_threads_by_path.items():
             if path not in file_lines_by_path:
@@ -530,11 +590,17 @@ def main():
                         existing_thread = ghid_to_inline[ghid]["thread"]
                         break
                 if existing_thread:
-                    prefix = existing_thread["prefix"] or args.comment_prefix or default_comment_prefix(path)
+                    prefix = (
+                        existing_thread["prefix"]
+                        or args.comment_prefix
+                        or default_comment_prefix(path)
+                    )
                     header_inline = existing_thread["comments"][0]
                     header_line_index = header_inline["line_index"]
                     header_original_line = lines[header_line_index]
-                    header_newline = "\n" if not header_original_line.endswith("\n") else ""
+                    header_newline = (
+                        "\n" if not header_original_line.endswith("\n") else ""
+                    )
                     reviewer = header_inline["reviewer"]
                     author = header_inline["author"] or pr_author
                     last_author = None
@@ -544,8 +610,13 @@ def main():
                         if last.get("author"):
                             last_author = last["author"]["login"]
                     desired_kind = desired_header_kind(
-                        last_author, reviewer, author, fallback_kind=header_inline["kind"] or "CR"
+                        last_author,
+                        reviewer,
+                        author,
+                        fallback_kind=header_inline["kind"] or "CR",
                     )
+                    if gh_thread.get("isResolved"):
+                        desired_kind = inactive_kind(desired_kind)
                     header_ghid = header_inline["ghid"]
                     if not header_ghid and header_gh:
                         header_ghid = header_gh.get("databaseId")
@@ -564,11 +635,15 @@ def main():
                             inline_comment = ghid_to_inline[ghid]["comment"]
                             if args.prefer == "github":
                                 gh_body = normalize_gh_body(comment["body"])
-                                inline_body = normalize_inline_body(inline_comment["body"])
+                                inline_body = normalize_inline_body(
+                                    inline_comment["body"]
+                                )
                                 if gh_body != inline_body:
                                     line_index = inline_comment["line_index"]
                                     original_line = lines[line_index]
-                                    newline = "\n" if not original_line.endswith("\n") else ""
+                                    newline = (
+                                        "\n" if not original_line.endswith("\n") else ""
+                                    )
                                     if inline_comment["is_header"]:
                                         new_line = format_header(
                                             prefix,
@@ -590,7 +665,11 @@ def main():
                                     updates_by_path[path][line_index] = new_line
                             continue
                         body = normalize_gh_body(comment["body"])
-                        speaker = comment["author"]["login"] if comment.get("author") else "github"
+                        speaker = (
+                            comment["author"]["login"]
+                            if comment.get("author")
+                            else "github"
+                        )
                         new_lines.append(
                             format_reply(prefix, speaker, body, ghid=ghid, newline="\n")
                         )
@@ -617,13 +696,19 @@ def main():
                     continue
                 first = gh_comments_list[0]
                 prefix = args.comment_prefix or default_comment_prefix(path)
-                reviewer = first["author"]["login"] if first.get("author") else "reviewer"
+                reviewer = (
+                    first["author"]["login"] if first.get("author") else "reviewer"
+                )
                 header_body = normalize_gh_body(first["body"])
                 last_author = None
                 last = gh_comments_list[-1]
                 if last.get("author"):
                     last_author = last["author"]["login"]
-                header_kind = desired_header_kind(last_author, reviewer, pr_author, fallback_kind="CR")
+                header_kind = desired_header_kind(
+                    last_author, reviewer, pr_author, fallback_kind="CR"
+                )
+                if gh_thread.get("isResolved"):
+                    header_kind = inactive_kind(header_kind)
                 new_lines = [
                     format_header(
                         prefix,
@@ -636,7 +721,9 @@ def main():
                     )
                 ]
                 for reply in gh_comments_list[1:]:
-                    speaker = reply["author"]["login"] if reply.get("author") else "github"
+                    speaker = (
+                        reply["author"]["login"] if reply.get("author") else "github"
+                    )
                     body = normalize_gh_body(reply["body"])
                     new_lines.append(
                         format_reply(
@@ -664,18 +751,10 @@ def main():
         updated_paths.append(path)
         print("updated: {}".format(path))
 
-    if updated_paths and args.auto_commit and not args.dry_run:
+    if updated_paths and args.auto_push and not args.dry_run:
         root = git_root()
-        rel_paths = [os.path.relpath(p, root) for p in updated_paths]
-        if git_status_porcelain(rel_paths, cwd=root):
-            git_add(rel_paths, cwd=root)
-            git_commit(args.commit_message, cwd=root)
-            print("committed: {}".format(args.commit_message))
-            if args.auto_push:
-                git_push(cwd=root)
-                print("pushed: {}".format(root))
-        else:
-            print("skip: no git changes to commit")
+        git_push(cwd=root)
+        print("pushed: {}".format(root))
 
     return 0
 

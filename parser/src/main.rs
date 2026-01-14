@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     // 2 = reviewer (no spaces)
     // 3 = author (anything up to :)
     let header_re = Regex::new(
-        r"^[ \t]*((?://)*)?[ \t]*(\[#gh:\d+\]\s*)?>\s*((N)?(X)?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$",
+        r"^[ \t]*((?://|;|#)*)?[ \t]*(\[#gh:\d+\]\s*)?>\s*((N)?(X)?CR)\s+([^ ]+)\s+for\s+([^:]+):.*$",
     )
     .context("failed to compile header regex")?;
 

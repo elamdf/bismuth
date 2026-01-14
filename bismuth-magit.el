@@ -20,7 +20,7 @@
   :group 'bismuth-magit)
 
 
-(defcustom bismuth-magit-args '("--ext" "el" "--ext" "rs" "--ext" "md" "--ext" "org" "--ext" "markdown" "--ext" "txt"  "--ext" "rust")
+(defcustom bismuth-magit-args '("--ext" "el" "--ext" "rs" "--ext" "toml" "--ext" "md" "--ext" "org" "--ext" "markdown" "--ext" "txt"  "--ext" "rust")
 
   "Args passed to bismuth when scanning a repo."
   :type '(repeat string)
@@ -47,8 +47,38 @@
       (let* ((pr (forge-get-pullreq pullreq))
              (number (oref pr number)))
         (when number
-          (inline-cr-sync-gh number "pull" t nil)))
+          (inline-cr-sync-gh number "pull" nil)))
     (error (message "inline-cr: pull after checkout failed: %s" err))))
+
+(defun bismuth-magit--current-pr-number ()
+  "Return the current Forge PR number, or nil when unavailable."
+  (when (fboundp 'forge-current-pullreq)
+    (condition-case nil
+        (let ((pr (forge-current-pullreq)))
+          (and pr (oref pr number)))
+      (error nil))))
+
+(defun bismuth-magit--wrap-push-sentinel (process pr-number)
+  "Attach a sentinel to PROCESS to push inline-cr after a successful push."
+  (let ((orig-sentinel (process-sentinel process)))
+    (set-process-sentinel
+     process
+     (lambda (proc event)
+       (when orig-sentinel
+         (funcall orig-sentinel proc event))
+       (when (and pr-number
+                  (string-match-p "finished" event)
+                  (eq (process-status proc) 'exit)
+                  (zerop (process-exit-status proc)))
+         (inline-cr-sync-gh pr-number "push-only" nil))))))
+
+(defun bismuth-magit--magit-git-push-advice (orig-fn branch target args)
+  "Advice to trigger inline-cr sync after Magit push."
+  (let* ((pr-number (bismuth-magit--current-pr-number))
+         (process (funcall orig-fn branch target args)))
+    (when (and pr-number (processp process))
+      (bismuth-magit--wrap-push-sentinel process pr-number))
+    process))
 
 (defun inline-cr--project-root ()
   "Return the current project root if available."
@@ -56,20 +86,22 @@
       (and (fboundp 'projectile-project-root) (projectile-project-root))
       default-directory))
 
-(defun inline-cr-sync-gh (pr-number action auto-commit auto-push)
+(defun inline-cr-sync-gh (pr-number action auto-push)
   "Sync inline-cr threads with GitHub PR review comments."
   (interactive
-   (let* ((pr (read-number "PR number: "))
-          (action (completing-read "Sync action: " '("pull" "push" "pull-then-push") nil t "pull")))
+   (let* ((default-pr (bismuth-magit--current-pr-number))
+          (pr (read-number
+               (if default-pr
+                   (format "PR number (default %s): " default-pr)
+                 "PR number: ")
+               default-pr))
+          (action (completing-read "Sync action: " '("pull" "push" "push-only" "pull-then-push") nil t "pull")))
      (cond
       ((string= action "pull")
-       (list pr action t nil))
-      ((string= action "pull-then-push")
-       (list pr action t (y-or-n-p "Auto-push after commit? ")))
+       (list pr action nil))
       (t
        (list pr action
-             (y-or-n-p "Auto-commit updates? ")
-             (y-or-n-p "Auto-push after commit? "))))))
+             (y-or-n-p "Auto-push after sync? "))))))
   (let* ((root (inline-cr--project-root))
          (script (expand-file-name inline-cr-gh-sync-script inline-cr--bismuth-dir)))
     (if (not (file-exists-p script))
@@ -78,6 +110,7 @@
              (mode (cond
                     ((string= action "pull") "gh-to-inline")
                     ((string= action "push") "inline-to-gh")
+                    ((string= action "push-only") "inline-to-gh")
                     (t "both")))
              (cmd (format "python3 %s --pr %s --mode %s"
                           (shell-quote-argument script)
@@ -85,15 +118,20 @@
                           (shell-quote-argument mode)))
              (args ""))
         (when (string= action "pull")
-          (setq auto-commit t)
           (setq auto-push nil)
           (setq args (concat args " --pull-only")))
-        (when auto-commit
-          (setq args (concat args " --auto-commit")))
         (when auto-push
           (setq args (concat args " --auto-push")))
         (setq cmd (concat cmd args))
-        (let ((comp-buf (compilation-start cmd 'compilation-mode
+        (let* ((display-buffer-alist
+                (cons
+                 '("\\*inline-cr sync\\*"
+                   (display-buffer-in-side-window)
+                   (side . bottom)
+                   (slot . 0)
+                   (window-height . 0.25))
+                 display-buffer-alist))
+               (comp-buf (compilation-start cmd 'compilation-mode
                                             (lambda (_) "*inline-cr sync*"))))
           (with-current-buffer comp-buf
             (add-hook
@@ -212,5 +250,8 @@
   (advice-add 'forge-checkout-worktree :after
               (lambda (_path pullreq)
                 (bismuth-magit--pull-inline-cr-for-pullreq pullreq))))
+
+(with-eval-after-load 'magit-push
+  (advice-add 'magit-git-push :around #'bismuth-magit--magit-git-push-advice))
 
 (provide 'bismuth-magit)

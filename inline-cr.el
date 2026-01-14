@@ -39,7 +39,7 @@
 ; > CR elamdf for elamdf: make this major mode specific
   "A regular expression for comment prefixes."
 
-  (format "\\(?:\\(?:/[/]\\|;\\)\\s-*\\)*"))
+  (format "\\(?:\\(?:/[/]\\|;\\|#\\)\\s-*\\)*"))
 
 
 (defun inline-cr-header-regex ()
@@ -120,25 +120,36 @@
             #'re-search-backward))
          (restart (if (eq direction 'next) (point-min) (point-max)))
          (limit (if (eq direction 'next) (point-max) (point-min)))
-         (user (regexp-quote inline-cr-user))
-         (patterns (list (concat "^.*> CR .* for " user ":")
-                         (concat "^.*> XCR " user " for .*:")))
          (found nil))
-    ;; Search forward or backward
     (save-excursion
       (forward-line step)
       (while (and (not found)
-                  (or (funcall search-fn (car patterns) limit t)
-                      (funcall search-fn (cadr patterns) limit t)))
-        (setq found (line-beginning-position))))
-    ;; Wrap around if not found
+                  (funcall search-fn (inline-cr-header-regex) limit t))
+        (let* ((kind (match-string 2))
+               (who (match-string 5))
+               (whom (match-string 6)))
+          (when (and kind
+                     (not (or (string= kind "NCR") (string= kind "NXCR")))
+                     (or (and (string= kind "CR")
+                              (string= whom inline-cr-user))
+                         (and (string= kind "XCR")
+                              (string= who inline-cr-user))))
+            (setq found (line-beginning-position))))))
     (unless found
       (save-excursion
         (goto-char restart)
         (while (and (not found)
-                    (or (funcall search-fn (car patterns) limit t)
-                        (funcall search-fn (cadr patterns) limit t)))
-          (setq found (line-beginning-position)))))
+                    (funcall search-fn (inline-cr-header-regex) limit t))
+          (let* ((kind (match-string 2))
+                 (who (match-string 5))
+                 (whom (match-string 6)))
+            (when (and kind
+                       (not (or (string= kind "NCR") (string= kind "NXCR")))
+                       (or (and (string= kind "CR")
+                                (string= whom inline-cr-user))
+                           (and (string= kind "XCR")
+                                (string= who inline-cr-user))))
+              (setq found (line-beginning-position)))))))
     (if found
         (goto-char found)
       (message "No %s actionable comments for %s."
@@ -202,14 +213,13 @@
         (when (not (looking-at (inline-cr-header-regex)))
           (error "Thread doesn't start with a header!"))
 
-        (forward-line 1)
         (setq last-author (match-string 6))
-
-        (setq comment-str (or (match-string 1) ""))
+        (let ((comment-str (or (match-string 1) "")))
+        (forward-line 1)
         (while
             (and (not (eobp)) (looking-at (inline-cr-thread-regex)))
-          (when (match-string 4)
-            (setq last-author (match-string 4)))
+          (when (match-string 3)
+            (setq last-author (match-string 3)))
           (setq comment-str (match-string 1))
           (forward-line 1)
           )
@@ -220,7 +230,7 @@
                     (format "\n%s%s> %s: " comment-str prefix user)
                   (format "\n%s%s> " comment-str prefix)))
         (goto-char (line-end-position))
-        ))
+        )))
 
      (t
       (call-interactively #'newline)))))
@@ -240,12 +250,12 @@
                       (looking-at (inline-cr-thread-regex))))
           (forward-line -1))
         (beginning-of-line)
-        (cond
-         ((looking-at "^\s*> N")
-          (replace-match ( format "> ") t t))
-         ((looking-at "^\s*> ")
-          (replace-match ( format "> N") t t))
-         ())
+        (when (looking-at (inline-cr-header-regex))
+          (let* ((kind (match-string 2))
+                 (new-kind (if (string-prefix-p "N" kind)
+                               (substring kind 1)
+                             (concat "N" kind))))
+            (replace-match new-kind t t nil 2)))
         (inline-cr--refresh-display))
     (call-interactively 'comment-dwim))) ;; this is hardcoded, assumes we're globally overwriting M-; with this
 
@@ -264,12 +274,13 @@
                       (looking-at (inline-cr-thread-regex))))
           (forward-line -1))
         (beginning-of-line)
-        (cond
-         ((looking-at "^\s*> CR ")
-          (replace-match ( format "> XCR ") t t))
-         ((looking-at "^\s*> XCR ")
-          (replace-match ( format "> CR ") t t))
-         ())
+        (when (looking-at (inline-cr-header-regex))
+          (let* ((kind (match-string 2))
+                 (inactive (string-prefix-p "N" kind))
+                 (base (if inactive (substring kind 1) kind))
+                 (toggled (if (string= base "CR") "XCR" "CR"))
+                 (new-kind (if inactive (concat "N" toggled) toggled)))
+            (replace-match new-kind t t nil 2)))
         (inline-cr--refresh-display))))
 
 
