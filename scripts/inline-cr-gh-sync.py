@@ -20,6 +20,15 @@ REPLY_RE = re.compile(
 )
 
 
+class GhCommandError(RuntimeError):
+    def __init__(self, cmd, stdout, stderr, returncode):
+        super().__init__(cmd)
+        self.cmd = cmd
+        self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
+
+
 def run(cmd, input_data=None, cwd=None):
     result = subprocess.run(
         cmd,
@@ -30,16 +39,27 @@ def run(cmd, input_data=None, cwd=None):
         cwd=cwd,
     )
     if result.returncode != 0:
-        raise RuntimeError(
-            "Command failed: {}\nstdout:\n{}\nstderr:\n{}".format(
-                " ".join(cmd), result.stdout, result.stderr
-            )
+        raise GhCommandError(
+            " ".join(cmd),
+            result.stdout,
+            result.stderr,
+            result.returncode,
         )
     return result.stdout
 
 
 def gh_json(args, input_data=None):
-    output = run(["gh"] + args, input_data=input_data)
+    try:
+        output = run(["gh"] + args, input_data=input_data)
+    except GhCommandError as err:
+        raise RuntimeError(
+            "gh command failed:\n  cmd: {}\n  status: {}\n  stdout: {}\n  stderr: {}".format(
+                err.cmd,
+                err.returncode,
+                (err.stdout or "").strip(),
+                (err.stderr or "").strip(),
+            )
+        ) from None
     return json.loads(output) if output.strip() else {}
 
 
@@ -278,7 +298,14 @@ def gh_create_review_comment(
     ]
     if in_reply_to:
         args += ["-F", "in_reply_to={}".format(in_reply_to)]
-    return gh_json(args)
+    try:
+        return gh_json(args)
+    except RuntimeError as err:
+        raise RuntimeError(
+            "Failed to create review comment for {}:{} (side {}, commit {}).\n"
+            "This usually means the line no longer exists in the PR diff or the commit SHA is stale.\n"
+            "Details:\n{}".format(path, line, side, commit_id, err)
+        ) from None
 
 
 def gh_update_review_comment(repo, comment_id, body):
@@ -355,6 +382,17 @@ def inactive_kind(kind):
     return "N{}".format(kind)
 
 
+def is_self_cr(header_comment, current_user):
+    if not header_comment or not current_user:
+        return False
+    if header_comment.get("kind") not in {"CR", "XCR", "NCR", "NXCR"}:
+        return False
+    return (
+        header_comment.get("reviewer") == current_user
+        and header_comment.get("author") == current_user
+    )
+
+
 def apply_inline_updates(path, lines, updates, insertions):
     for line_index, new_line in updates.items():
         lines[line_index] = new_line
@@ -404,6 +442,7 @@ def main():
         if args.prefer == "inline":
             args.prefer = "github"
 
+    current_user = os.getenv("USER") or os.getenv("LOGNAME")
     repo = get_repo_name(args.repo)
     owner, name = split_repo(repo)
     pr_info = get_pr_info(repo, args.pr)
@@ -451,6 +490,8 @@ def main():
         for path, inline_threads in inline_threads_by_path.items():
             for thread in inline_threads:
                 header_comment = thread["comments"][0] if thread["comments"] else None
+                if is_self_cr(header_comment, current_user):
+                    continue
                 if header_comment and header_comment.get("kind", "").startswith("N"):
                     header_ghid = header_comment.get("ghid")
                     thread_id = gh_comment_to_thread_id.get(header_ghid)
@@ -596,6 +637,8 @@ def main():
                         or default_comment_prefix(path)
                     )
                     header_inline = existing_thread["comments"][0]
+                    if is_self_cr(header_inline, current_user):
+                        continue
                     header_line_index = header_inline["line_index"]
                     header_original_line = lines[header_line_index]
                     header_newline = (
@@ -700,6 +743,8 @@ def main():
                     first["author"]["login"] if first.get("author") else "reviewer"
                 )
                 header_body = normalize_gh_body(first["body"])
+                if reviewer == pr_author and reviewer == current_user:
+                    continue
                 last_author = None
                 last = gh_comments_list[-1]
                 if last.get("author"):

@@ -58,27 +58,34 @@
           (and pr (oref pr number)))
       (error nil))))
 
-(defun bismuth-magit--wrap-push-sentinel (process pr-number)
-  "Attach a sentinel to PROCESS to push inline-cr after a successful push."
-  (let ((orig-sentinel (process-sentinel process)))
-    (set-process-sentinel
-     process
-     (lambda (proc event)
-       (when orig-sentinel
-         (funcall orig-sentinel proc event))
-       (when (and pr-number
-                  (string-match-p "finished" event)
-                  (eq (process-status proc) 'exit)
-                  (zerop (process-exit-status proc)))
-         (inline-cr-sync-gh pr-number "push-only" nil))))))
+(defun bismuth-magit--sync-before-push (pr-number)
+  "Sync inline-cr comments before pushing the current branch."
+  (let* ((root (inline-cr--project-root))
+         (script (expand-file-name inline-cr-gh-sync-script inline-cr--bismuth-dir)))
+    (unless (file-exists-p script)
+      (user-error "inline-cr: sync script not found at %s" script))
+    (let ((default-directory root))
+      (with-temp-buffer
+        (let* ((exit (call-process
+                      "python3"
+                      nil
+                      (current-buffer)
+                      nil
+                      script
+                      "--pr"
+                      (number-to-string pr-number)
+                      "--mode"
+                      "inline-to-gh"))
+               (output (string-trim-right (buffer-string))))
+          (unless (and (integerp exit) (zerop exit))
+            (user-error "inline-cr sync failed:\n%s" output)))))))
 
 (defun bismuth-magit--magit-git-push-advice (orig-fn branch target args)
   "Advice to trigger inline-cr sync after Magit push."
-  (let* ((pr-number (bismuth-magit--current-pr-number))
-         (process (funcall orig-fn branch target args)))
-    (when (and pr-number (processp process))
-      (bismuth-magit--wrap-push-sentinel process pr-number))
-    process))
+  (let ((pr-number (bismuth-magit--current-pr-number)))
+    (when pr-number
+      (bismuth-magit--sync-before-push pr-number))
+    (funcall orig-fn branch target args)))
 
 (defun inline-cr--project-root ()
   "Return the current project root if available."
