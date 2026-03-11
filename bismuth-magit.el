@@ -212,6 +212,7 @@
         (and (string= kind "XCR")
              (string= reviewer inline-cr-user)))))
 
+
 (defun bismuth-magit-insert-actionables ()
   "Insert a Magit status section listing CR/XCR actionables for the current repo."
   (let* ((root (bismuth-magit--repo-root))
@@ -224,13 +225,13 @@
                        (actionables (seq-filter #'bismuth-magit--actionable-item-p
                                                 items)))
             (when actionables
-              (magit-insert-section (bismuth-file file 'children)
+              (magit-insert-section (bismuth-file file 'hide)
                 (magit-insert-heading file)
                 (dolist (item actionables)
                   (pcase-let* ((`(,line-str . ,v) item)
                                (`(,kind ,reviewer ,author ,header . ,_) v)
                                (line (string-to-number line-str)))
-                    (magit-insert-section (bismuth-item (cons file line))
+                    (magit-insert-section (bismuth-item (cons file line) 'hide)
                       (insert
                        (propertize
                         (format "  %5d  %-3s  %s → %s  %s\n"

@@ -415,14 +415,22 @@ If the head has `inline-cr-actionable` property, use the actionable face."
   (if inline-cr-mode
       (progn
         (jit-lock-register #'inline-cr--scan-for-actionables)
+        ;; Clean up pre-fix global registrations before installing the hook
+        ;; buffer-locally for this mode instance.
+        (remove-hook 'after-change-functions
+                     #'inline-cr--refresh-display-rest)
         (add-hook 'after-change-functions
-                  #'inline-cr--refresh-display-rest)
+                  #'inline-cr--refresh-display-rest
+                  nil t)
         (inline-cr--refresh-display)
         )
     (progn
       (jit-lock-unregister #'inline-cr--scan-for-actionables)
       (remove-hook 'after-change-functions
                    #'inline-cr--refresh-display-rest)
+      (remove-hook 'after-change-functions
+                   #'inline-cr--refresh-display-rest
+                   t)
 
       (inline-cr--cleanup)
       )
