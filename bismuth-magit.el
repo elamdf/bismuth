@@ -188,66 +188,60 @@
     (forward-line (1- line))
     (recenter)))
 
+
+(defvar bismuth-magit-actionable-map
+  (let ((m (make-sparse-keymap)))
+    (define-key m (kbd "RET") #'bismuth-magit--visit)
+    (define-key m (kbd "<return>") #'bismuth-magit--visit)
+    (define-key m [mouse-1] #'bismuth-magit--visit)
+    m)
+  "Keymap used on actionable review thread lines.")
+
+(defvar bismuth-magit-actionable-map
+  (let ((m (make-sparse-keymap)))
+    (define-key m (kbd "RET") #'bismuth-magit--visit)
+    (define-key m (kbd "<return>") #'bismuth-magit--visit)
+    (define-key m [mouse-1] #'bismuth-magit--visit)
+    m))
+
+(defun bismuth-magit--actionable-item-p (item)
+  (pcase-let* ((`(,line-str . ,v) item)
+               (`(,kind ,reviewer ,author ,header . ,_) v))
+    (or (and (string= kind "CR")
+             (string= author inline-cr-user))
+        (and (string= kind "XCR")
+             (string= reviewer inline-cr-user)))))
+
 (defun bismuth-magit-insert-actionables ()
-    "Insert a Magit status section listing CR/XCR actionables for the current repo."
-  (let ((inhibit-read-only t)) ;; we need this to mutate the magit buffer
+  "Insert a Magit status section listing CR/XCR actionables for the current repo."
+  (let* ((root (bismuth-magit--repo-root))
+         (data (bismuth-magit--run root)))
+    (when (consp data)
+      (magit-insert-section (bismuth-actionables root  'children)
+        (magit-insert-heading "Actionable Code Review Threads")
+        (dolist (file-pair data)
+          (pcase-let* ((`(,file . ,items) file-pair)
+                       (actionables (seq-filter #'bismuth-magit--actionable-item-p
+                                                items)))
+            (when actionables
+              (magit-insert-section (bismuth-file file 'children)
+                (magit-insert-heading file)
+                (dolist (item actionables)
+                  (pcase-let* ((`(,line-str . ,v) item)
+                               (`(,kind ,reviewer ,author ,header . ,_) v)
+                               (line (string-to-number line-str)))
+                    (magit-insert-section (bismuth-item (cons file line))
+                      (insert
+                       (propertize
+                        (format "  %5d  %-3s  %s → %s  %s\n"
+                                line kind reviewer author (string-trim header))
+                        'bismuth-file file
+                        'bismuth-line line
+                        'mouse-face 'highlight
+                        'help-echo "RET: visit actionable"
+                        'keymap bismuth-magit-actionable-map)))))))))))))
 
 
-    (let* ((root (bismuth-magit--repo-root))
-           (data (bismuth-magit--run root)))
-      (when (and data (consp data))
-        (magit-insert-section (bismuth-actionables (bismuth-magit--repo-root))
-          (magit-insert-heading "Actionable Code Review Threads")
-          ;; data: ((\"path/to/file\" . ((\"12\" . [..]) ...)) ...)
-          (dolist (file-pair data)
-            (let* ((file (car file-pair))
-                   (items (cdr file-pair)))
-              ;; not very performant or pretty but whaever
-              (if (cl-some (lambda (li) (let* ((line-str (car li))
-                         (v (cdr li)) ;; now a LIST: (kind reviewer author header thread)
-                         (line (string-to-number line-str))
-                         (kind (nth 0 v))
-                         (reviewer (nth 1 v))
-                         (author (nth 2 v))
-                         (header (nth 3 v)))
-                                 (or
-                         (and (string= kind "CR")
-                              (string= author inline-cr-user))
-                         (and (string= kind "XCR")
-                              (string= reviewer inline-cr-user))))) items
-                                )
-
-              (magit-insert-section (bismuth-file (list :file file))
-                (magit-insert-heading (propertize file 'face 'magit-section-heading))
-                ;; items: alist (line-string . vector[kind reviewer author header thread])
-                (dolist (li items)
-                  (let* ((line-str (car li))
-                         (v (cdr li)) ;; now a LIST: (kind reviewer author header thread)
-                         (line (string-to-number line-str))
-                         (kind (nth 0 v))
-                         (reviewer (nth 1 v))
-                         (author (nth 2 v))
-                         (header (nth 3 v)))
-
-                    (if (or
-                         (and (string= kind "CR")
-                              (string= author inline-cr-user))
-                         (and (string= kind "XCR")
-                              (string= reviewer inline-cr-user)))
-                        (magit-insert-section (bismuth-item (list :file file :line line))
-                          (insert
-                           (propertize
-                            (format "  %5d  %-3s  %s → %s  %s\n"
-                                    line kind reviewer author (string-trim header))
-                            'bismuth-file file
-                            'bismuth-line line
-                            'mouse-face 'highlight
-                            'help-echo "RET: visit actionable"
-                            'keymap (let ((m (make-sparse-keymap)))
-                                      (define-key m (kbd "RET") #'bismuth-magit--visit)
-                                      (define-key m (kbd "<return>") #'bismuth-magit--visit)
-                                      (define-key m [mouse-1] #'bismuth-magit--visit)
-                                      m))))))))))))))))
 
 (with-eval-after-load 'magit
   (define-key magit-status-mode-map (kbd "C-c C-i") #'inline-cr-sync-gh))
